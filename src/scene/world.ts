@@ -131,7 +131,8 @@ export function createWorld(container: HTMLElement): World {
 
   const desiredPosition = new THREE.Vector3();
   const desiredLookAt = new THREE.Vector3();
-  const clock = new THREE.Clock();
+  const timer = new THREE.Timer();
+  timer.connect(document); // ignores time spent in a hidden tab
   return {
     scene,
     camera,
@@ -150,8 +151,9 @@ export function createWorld(container: HTMLElement): World {
       camera.lookAt(lookAt);
     },
     start(onFrame) {
-      renderer.setAnimationLoop(() => {
-        onFrame(Math.min(clock.getDelta(), 0.1));
+      renderer.setAnimationLoop((timestamp) => {
+        timer.update(timestamp);
+        onFrame(Math.min(timer.getDelta(), 0.1));
         renderer.render(scene, camera);
         labels.render(scene, camera);
       });

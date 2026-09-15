@@ -8,9 +8,15 @@ import { type Infer as __Infer } from "spacetimedb";
 // Import all reducer arg schemas
 import JoinReducer from "../join_reducer";
 import MoveReducer from "../move_reducer";
+import PlacePieceReducer from "../place_piece_reducer";
+import RemovePieceReducer from "../remove_piece_reducer";
+import RotatePieceReducer from "../rotate_piece_reducer";
 import SetNameReducer from "../set_name_reducer";
 
 export type JoinParams = __Infer<typeof JoinReducer>;
 export type MoveParams = __Infer<typeof MoveReducer>;
+export type PlacePieceParams = __Infer<typeof PlacePieceReducer>;
+export type RemovePieceParams = __Infer<typeof RemovePieceReducer>;
+export type RotatePieceParams = __Infer<typeof RotatePieceReducer>;
 export type SetNameParams = __Infer<typeof SetNameReducer>;
 

@@ -45,7 +45,12 @@ export function connect(events: ConnectionEvents): DbConnection {
           events.onReady(conn, identity);
         })
         .onError(() => events.onStatus('error', 'Subscription failed'))
-        .subscribe([tables.gameState, tables.player]);
+        .subscribe([
+          tables.gameState,
+          tables.player,
+          tables.piece,
+          tables.activity,
+        ]);
     })
     .onDisconnect(() => events.onStatus('disconnected'))
     .onConnectError((_ctx, error) => events.onStatus('error', error.message))

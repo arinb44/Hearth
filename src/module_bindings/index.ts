@@ -36,18 +36,31 @@ import {
 // Import all reducer arg schemas
 import JoinReducer from "./join_reducer";
 import MoveReducer from "./move_reducer";
+import PlacePieceReducer from "./place_piece_reducer";
+import RemovePieceReducer from "./remove_piece_reducer";
+import RotatePieceReducer from "./rotate_piece_reducer";
 import SetNameReducer from "./set_name_reducer";
 
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import ActivityRow from "./activity_table";
 import GameStateRow from "./game_state_table";
+import PieceRow from "./piece_table";
 import PlayerRow from "./player_table";
 
 /** Type-only namespace exports for generated type groups. */
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  activity: __table({
+    name: 'activity',
+    indexes: [
+    ],
+    constraints: [
+    ],
+    event: true,
+  }, ActivityRow),
   gameState: __table({
     name: 'game_state',
     indexes: [
@@ -59,6 +72,24 @@ const tablesSchema = __schema({
       { name: 'game_state_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, GameStateRow),
+  piece: __table({
+    name: 'piece',
+    indexes: [
+      { accessor: 'id', name: 'piece_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'placedBy', name: 'piece_placed_by_idx_btree', algorithm: 'btree', columns: [
+        'placedBy',
+      ] },
+      { accessor: 'tileKey', name: 'piece_tile_key_idx_btree', algorithm: 'btree', columns: [
+        'tileKey',
+      ] },
+    ],
+    constraints: [
+      { name: 'piece_id_key', constraint: 'unique', columns: ['id'] },
+      { name: 'piece_tile_key_key', constraint: 'unique', columns: ['tileKey'] },
+    ],
+  }, PieceRow),
   player: __table({
     name: 'player',
     indexes: [
@@ -76,6 +107,9 @@ const tablesSchema = __schema({
 const reducersSchema = __reducers(
   __reducerSchema("join", JoinReducer),
   __reducerSchema("move", MoveReducer),
+  __reducerSchema("place_piece", PlacePieceReducer),
+  __reducerSchema("remove_piece", RemovePieceReducer),
+  __reducerSchema("rotate_piece", RotatePieceReducer),
   __reducerSchema("set_name", SetNameReducer),
 );
 

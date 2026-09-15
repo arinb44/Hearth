@@ -10,6 +10,16 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const Activity = __t.object("Activity", {
+  kind: __t.string(),
+  actorName: __t.string(),
+  colorIndex: __t.u8(),
+  pieceKind: __t.string(),
+  tileX: __t.u8(),
+  tileZ: __t.u8(),
+});
+export type Activity = __Infer<typeof Activity>;
+
 export const GameState = __t.object("GameState", {
   id: __t.u8(),
   get phase() {
@@ -27,6 +37,19 @@ export const Phase = __t.enum("Phase", {
   Results: __t.unit(),
 });
 export type Phase = __Infer<typeof Phase>;
+
+export const Piece = __t.object("Piece", {
+  id: __t.u64(),
+  tileKey: __t.u32(),
+  tileX: __t.u8(),
+  tileZ: __t.u8(),
+  kind: __t.string(),
+  rotation: __t.u8(),
+  placedBy: __t.identity(),
+  placedAt: __t.timestamp(),
+  round: __t.u32(),
+});
+export type Piece = __Infer<typeof Piece>;
 
 export const Player = __t.object("Player", {
   identity: __t.identity(),

@@ -7,7 +7,15 @@ import {
   type InferSchema,
   type ReducerCtx,
 } from 'spacetimedb/server';
+import { tileKey } from './logic/grid';
 import { constrainMove, isFiniteVec, normalizeHeading } from './logic/movement';
+import {
+  BUILD_ERROR_MESSAGES,
+  checkModify,
+  checkPlacement,
+  SERVER_REACH_SLACK,
+  type BuildError,
+} from './logic/pieces';
 import { pickColorIndex, sanitizeName } from './logic/players';
 
 const Phase = t.enum('Phase', ['Lobby', 'Building', 'Scoring', 'Results']);
@@ -46,10 +54,70 @@ const session = table(
   },
 );
 
-const spacetimedb = schema({ gameState, player, session });
+// The shared board. `tileKey` is unique, so the database itself guarantees at most
+// one piece per tile even when several players click the same tile at once.
+const piece = table(
+  { name: 'piece', public: true },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    tileKey: t.u32().unique(),
+    tileX: t.u8(),
+    tileZ: t.u8(),
+    kind: t.string(),
+    rotation: t.u8(),
+    placedBy: t.identity().index('btree'),
+    placedAt: t.timestamp(),
+    round: t.u32(),
+  },
+);
+
+// Event table: rows are broadcast to subscribers once and never stored client-side.
+// Drives the activity feed and placement effects.
+const activity = table(
+  { name: 'activity', public: true, event: true },
+  {
+    kind: t.string(),
+    actorName: t.string(),
+    colorIndex: t.u8(),
+    pieceKind: t.string(),
+    tileX: t.u8(),
+    tileZ: t.u8(),
+  },
+);
+
+const spacetimedb = schema({ gameState, player, session, piece, activity });
 export default spacetimedb;
 
 type Ctx = ReducerCtx<InferSchema<typeof spacetimedb>>;
+type PlayerRow = ReturnType<typeof requirePlayer>;
+
+function requireGameState(ctx: Ctx) {
+  const state = ctx.db.gameState.id.find(0);
+  if (!state) throw new Error('game_state singleton is missing');
+  return state;
+}
+
+function failIf(error: BuildError | null): void {
+  if (error) throw new SenderError(BUILD_ERROR_MESSAGES[error]);
+}
+
+function logActivity(
+  ctx: Ctx,
+  actor: PlayerRow,
+  kind: string,
+  pieceKind = '',
+  tileX = 0,
+  tileZ = 0,
+): void {
+  ctx.db.activity.insert({
+    kind,
+    actorName: actor.name,
+    colorIndex: actor.colorIndex,
+    pieceKind,
+    tileX,
+    tileZ,
+  });
+}
 
 function requireName(raw: string): string {
   const name = sanitizeName(raw);
@@ -115,7 +183,7 @@ export const join = spacetimedb.reducer(
       ctx.db.player.identity.update({ ...existing, name: clean, online: true });
       return;
     }
-    ctx.db.player.insert({
+    const created = ctx.db.player.insert({
       identity: ctx.sender,
       name: clean,
       colorIndex: pickColorIndex(colorsInUse(ctx, ctx.sender)),
@@ -126,6 +194,7 @@ export const join = spacetimedb.reducer(
       moveBudget: 0,
       lastMoveAt: ctx.timestamp,
     });
+    logActivity(ctx, created, 'joined');
   },
 );
 
@@ -163,5 +232,72 @@ export const move = spacetimedb.reducer(
       moveBudget: budget,
       lastMoveAt: ctx.timestamp,
     });
+  },
+);
+
+export const placePiece = spacetimedb.reducer(
+  { kind: t.string(), tileX: t.u8(), tileZ: t.u8(), rotation: t.u8() },
+  (ctx, { kind, tileX, tileZ, rotation }) => {
+    const me = requirePlayer(ctx);
+    const state = requireGameState(ctx);
+    const key = tileKey(tileX, tileZ);
+    failIf(
+      checkPlacement({
+        kind,
+        rotation,
+        tile: { x: tileX, z: tileZ },
+        phase: state.phase.tag,
+        occupied: ctx.db.piece.tileKey.find(key) !== null,
+        playerPos: me,
+        reachSlack: SERVER_REACH_SLACK,
+      }),
+    );
+    ctx.db.piece.insert({
+      id: 0n,
+      tileKey: key,
+      tileX,
+      tileZ,
+      kind,
+      rotation,
+      placedBy: ctx.sender,
+      placedAt: ctx.timestamp,
+      round: state.round,
+    });
+    logActivity(ctx, me, 'placed', kind, tileX, tileZ);
+  },
+);
+
+function requireModifiable(ctx: Ctx, tileX: number, tileZ: number) {
+  const me = requirePlayer(ctx);
+  const existing = ctx.db.piece.tileKey.find(tileKey(tileX, tileZ));
+  failIf(
+    checkModify({
+      tile: { x: tileX, z: tileZ },
+      phase: requireGameState(ctx).phase.tag,
+      occupied: existing !== null,
+      playerPos: me,
+      reachSlack: SERVER_REACH_SLACK,
+    }),
+  );
+  return { me, existing: existing! };
+}
+
+export const rotatePiece = spacetimedb.reducer(
+  { tileX: t.u8(), tileZ: t.u8() },
+  (ctx, { tileX, tileZ }) => {
+    const { existing } = requireModifiable(ctx, tileX, tileZ);
+    ctx.db.piece.id.update({
+      ...existing,
+      rotation: (existing.rotation + 1) % 4,
+    });
+  },
+);
+
+export const removePiece = spacetimedb.reducer(
+  { tileX: t.u8(), tileZ: t.u8() },
+  (ctx, { tileX, tileZ }) => {
+    const { me, existing } = requireModifiable(ctx, tileX, tileZ);
+    ctx.db.piece.id.delete(existing.id);
+    logActivity(ctx, me, 'removed', existing.kind, tileX, tileZ);
   },
 );

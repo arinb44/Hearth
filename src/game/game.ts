@@ -5,9 +5,13 @@ import { KeyboardMovement } from '../input/desktop';
 import type { DbConnection } from '../module_bindings';
 import type { Player } from '../module_bindings/types';
 import { Avatar } from '../scene/avatars';
+import { PieceLayer } from '../scene/pieces';
 import type { World } from '../scene/world';
+import { ActivityFeed } from '../ui/feed';
 import { JoinScreen } from '../ui/join';
 import { PlayerList } from '../ui/players';
+import { Toast } from '../ui/toast';
+import { Builder } from './builder';
 import { LocalPlayer } from './localPlayer';
 
 function colorOf(p: Player): number {
@@ -20,6 +24,9 @@ export class Game {
   private readonly keyboard = new KeyboardMovement();
   private readonly playerList = new PlayerList();
   private readonly joinScreen: JoinScreen;
+  private readonly pieces: PieceLayer;
+  private readonly builder: Builder;
+  private readonly feed = new ActivityFeed();
   private readonly myHex: string;
   private readonly followTarget = new THREE.Vector3();
   private local: LocalPlayer | null = null;
@@ -33,6 +40,19 @@ export class Game {
     this.joinScreen = new JoinScreen(async (name) => {
       await conn.reducers.join({ name });
     });
+    this.pieces = new PieceLayer(world.scene);
+    this.builder = new Builder(
+      world,
+      conn,
+      new Toast(),
+      () => this.local?.pos ?? null,
+    );
+
+    conn.db.piece.onInsert((_ctx, row) => this.pieces.upsert(row));
+    conn.db.piece.onUpdate((_ctx, _old, row) => this.pieces.upsert(row));
+    conn.db.piece.onDelete((_ctx, row) => this.pieces.remove(row));
+    for (const row of conn.db.piece.iter()) this.pieces.upsert(row);
+    conn.db.activity.onInsert((_ctx, event) => this.feed.add(event));
 
     conn.db.player.onInsert((_ctx, row) => this.onPlayer(row));
     conn.db.player.onUpdate((_ctx, old, row) => this.onPlayer(row, old));
@@ -55,6 +75,8 @@ export class Game {
         ?.setTarget(this.local.pos.x, this.local.pos.z, this.local.heading);
     }
     for (const avatar of this.avatars.values()) avatar.update(dt);
+    this.pieces.update(dt);
+    this.builder.update();
 
     const me = this.avatars.get(this.myHex);
     this.world.follow(me ? this.followTarget.copy(me.root.position) : null, dt);
@@ -82,6 +104,7 @@ export class Game {
       } else if (!this.local) {
         this.local = new LocalPlayer(this.conn, row);
         this.joinScreen.hide();
+        this.builder.setEnabled(true);
       } else {
         this.local.reconcile(row);
       }

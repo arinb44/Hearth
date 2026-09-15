@@ -211,3 +211,127 @@ body {
 .card small {
   opacity: 0.55;
 }
+
+#feed {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  max-width: min(320px, 60vw);
+}
+
+#feed li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: var(--panel);
+  font-size: 13px;
+  animation: feed-in 0.25s ease-out;
+  transition: opacity 0.6s;
+}
+
+#feed li.fading {
+  opacity: 0;
+}
+
+@keyframes feed-in {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+}
+
+#palette {
+  position: absolute;
+  left: 50%;
+  bottom: 36px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  max-width: calc(100vw - 32px);
+  overflow-x: auto;
+  padding: 8px;
+  border-radius: 18px;
+  background: var(--panel);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 6px 20px rgba(31, 42, 55, 0.16);
+  pointer-events: auto;
+}
+
+#palette[hidden] {
+  display: none;
+}
+
+#palette button {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-width: 58px;
+  padding: 6px 4px 4px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.6);
+  font: inherit;
+  cursor: pointer;
+}
+
+#palette button.selected {
+  border-color: #2f9e44;
+  background: #ebfbee;
+}
+
+#palette .icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+#palette .label {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+#palette kbd {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-size: 9px;
+  opacity: 0.5;
+  font-family: inherit;
+}
+
+#hint {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0.6;
+}
+
+#toast {
+  position: absolute;
+  left: 50%;
+  bottom: 118px;
+  transform: translate(-50%, 8px);
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(31, 42, 55, 0.88);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  opacity: 0;
+  transition:
+    opacity 0.2s,
+    transform 0.2s;
+}
+
+#toast.visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
