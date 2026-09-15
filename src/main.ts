@@ -1,4 +1,5 @@
 import './ui/styles.css';
+import { Game } from './game/game';
 import { connect, type ConnectionStatus } from './net/connection';
 import type { DbConnection } from './module_bindings';
 import { createWorld } from './scene/world';
@@ -17,7 +18,11 @@ function showGameState(conn: DbConnection): void {
 }
 
 const world = createWorld(document.getElementById('app')!);
-world.start(() => {});
+let game: Game | null = null;
+world.start((dt) => {
+  if (game) game.update(dt);
+  else world.follow(null, dt);
+});
 
 connect({
   onStatus(status, detail) {
@@ -29,8 +34,9 @@ connect({
     };
     setStatus(status, labels[status]);
   },
-  onReady(conn) {
+  onReady(conn, identity) {
     showGameState(conn);
     conn.db.gameState.onUpdate(() => showGameState(conn));
+    game = new Game(world, conn, identity);
   },
 });

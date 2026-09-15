@@ -12,6 +12,22 @@
     <div id="app"></div>
     <div id="hud">
       <div id="status" class="pill" data-status="connecting">Connecting…</div>
+      <aside id="players" class="panel" hidden></aside>
+      <div id="join" class="overlay" hidden>
+        <form class="card">
+          <h1>Coop Builder</h1>
+          <p>Build together. Beat the clock.</p>
+          <input
+            name="name"
+            placeholder="Your name"
+            autocomplete="nickname"
+            enterkeyhint="go"
+          />
+          <button type="submit">Join the island</button>
+          <div class="join-error" role="alert"></div>
+          <small>Move with WASD or the arrow keys</small>
+        </form>
+      </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

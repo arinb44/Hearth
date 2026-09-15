@@ -1,6 +1,6 @@
 import type { Identity } from 'spacetimedb';
 import { DbConnection, tables } from '../module_bindings';
-import { STDB_DB_NAME, STDB_HOST } from '../config';
+import { STDB_DB_NAME, STDB_HOST, STORAGE_SUFFIX } from '../config';
 
 export type ConnectionStatus =
   'connecting' | 'connected' | 'disconnected' | 'error';
@@ -12,7 +12,7 @@ export interface ConnectionEvents {
 }
 
 // Tokens are per server + database, so a local token is never sent to Maincloud.
-const TOKEN_KEY = `coop-builder:token:${STDB_HOST}/${STDB_DB_NAME}`;
+const TOKEN_KEY = `coop-builder:token:${STDB_HOST}/${STDB_DB_NAME}${STORAGE_SUFFIX}`;
 
 function loadToken(): string | undefined {
   try {
@@ -45,7 +45,7 @@ export function connect(events: ConnectionEvents): DbConnection {
           events.onReady(conn, identity);
         })
         .onError(() => events.onStatus('error', 'Subscription failed'))
-        .subscribe([tables.gameState]);
+        .subscribe([tables.gameState, tables.player]);
     })
     .onDisconnect(() => events.onStatus('disconnected'))
     .onConnectError((_ctx, error) => events.onStatus('error', error.message))

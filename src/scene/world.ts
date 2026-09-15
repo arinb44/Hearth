@@ -1,12 +1,19 @@
 import * as THREE from 'three';
+import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { GRID_SIZE, TILE_SIZE } from '../../spacetimedb/src/logic/grid';
 
 export interface World {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
+  /** Eases the camera toward following `target`, or the island overview when null. */
+  follow(target: THREE.Vector3 | null, dt: number): void;
   start(onFrame: (dt: number) => void): void;
 }
+
+const OVERVIEW_POSITION = new THREE.Vector3(22, 26, 28);
+const FOLLOW_OFFSET = new THREE.Vector3(0, 11, 11);
+const CAMERA_SMOOTHING = 5;
 
 const COLORS = {
   sky: '#bfe6f5',
@@ -100,8 +107,14 @@ export function createWorld(container: HTMLElement): World {
   scene.fog = new THREE.Fog(COLORS.sky, 45, 120);
 
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 500);
-  camera.position.set(22, 26, 28);
-  camera.lookAt(0, 0, 0);
+  camera.position.copy(OVERVIEW_POSITION);
+  const lookAt = new THREE.Vector3();
+  camera.lookAt(lookAt);
+
+  // Name tags are HTML elements layered over the canvas.
+  const labels = new CSS2DRenderer();
+  labels.domElement.classList.add('labels');
+  container.appendChild(labels.domElement);
 
   scene.add(createIsland(), createWater());
   addLights(scene);
@@ -109,21 +122,38 @@ export function createWorld(container: HTMLElement): World {
   const resize = () => {
     const { clientWidth: w, clientHeight: h } = container;
     renderer.setSize(w, h);
+    labels.setSize(w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
   };
   window.addEventListener('resize', resize);
   resize();
 
+  const desiredPosition = new THREE.Vector3();
+  const desiredLookAt = new THREE.Vector3();
   const clock = new THREE.Clock();
   return {
     scene,
     camera,
     renderer,
+    follow(target, dt) {
+      if (target) {
+        desiredLookAt.copy(target);
+        desiredPosition.copy(target).add(FOLLOW_OFFSET);
+      } else {
+        desiredLookAt.set(0, 0, 0);
+        desiredPosition.copy(OVERVIEW_POSITION);
+      }
+      const t = 1 - Math.exp(-CAMERA_SMOOTHING * dt);
+      camera.position.lerp(desiredPosition, t);
+      lookAt.lerp(desiredLookAt, t);
+      camera.lookAt(lookAt);
+    },
     start(onFrame) {
       renderer.setAnimationLoop(() => {
         onFrame(Math.min(clock.getDelta(), 0.1));
         renderer.render(scene, camera);
+        labels.render(scene, camera);
       });
     },
   };

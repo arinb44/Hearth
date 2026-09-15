@@ -28,3 +28,22 @@ export const Phase = __t.enum("Phase", {
 });
 export type Phase = __Infer<typeof Phase>;
 
+export const Player = __t.object("Player", {
+  identity: __t.identity(),
+  name: __t.string(),
+  colorIndex: __t.u8(),
+  online: __t.bool(),
+  x: __t.f32(),
+  z: __t.f32(),
+  heading: __t.f32(),
+  moveBudget: __t.f32(),
+  lastMoveAt: __t.timestamp(),
+});
+export type Player = __Infer<typeof Player>;
+
+export const Session = __t.object("Session", {
+  connectionId: __t.connectionId(),
+  identity: __t.identity(),
+});
+export type Session = __Infer<typeof Session>;
+
