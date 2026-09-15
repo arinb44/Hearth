@@ -1,0 +1,67 @@
+:root {
+  --ink: #1f2a37;
+  --panel: rgba(255, 255, 255, 0.82);
+  --ok: #2fae63;
+  --warn: #e8a33d;
+  --bad: #d9534f;
+  font-family:
+    'Segoe UI',
+    system-ui,
+    -apple-system,
+    sans-serif;
+  color: var(--ink);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #bfe6f5;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+}
+
+#hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  padding: 16px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--panel);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 14px rgba(31, 42, 55, 0.12);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pill::before {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+
+.pill[data-status='connected']::before {
+  background: var(--ok);
+}
+
+.pill[data-status='disconnected']::before,
+.pill[data-status='error']::before {
+  background: var(--bad);
+}
