@@ -10,24 +10,23 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 import {
-  Phase,
   Mode,
+  Contribution,
 } from "./types";
 
 
 export default __t.row({
-  id: __t.u8().primaryKey(),
-  get phase() {
-    return Phase;
-  },
+  round: __t.u32().primaryKey(),
   get mode() {
     return Mode;
   },
-  round: __t.u32(),
   themeTitle: __t.string().name("theme_title"),
   challengeId: __t.u8().name("challenge_id"),
-  host: __t.option(__t.identity()),
-  phaseStartedAt: __t.timestamp().name("phase_started_at"),
-  phaseEndsAt: __t.option(__t.timestamp()).name("phase_ends_at"),
-  teamScore: __t.u32().name("team_score"),
+  score: __t.u32(),
+  completed: __t.bool(),
+  stars: __t.u8(),
+  get contributions() {
+    return __t.array(Contribution);
+  },
+  endedAt: __t.timestamp().name("ended_at"),
 });

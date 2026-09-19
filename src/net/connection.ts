@@ -47,6 +47,8 @@ export function connect(events: ConnectionEvents): DbConnection {
         .onError(() => events.onStatus('error', 'Subscription failed'))
         .subscribe([
           tables.gameState,
+          tables.config,
+          tables.roundResult,
           tables.player,
           tables.piece,
           tables.activity,

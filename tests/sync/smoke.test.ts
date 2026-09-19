@@ -5,13 +5,15 @@ describe('sync smoke', () => {
   const clients: TestClient[] = [];
   afterAll(() => disconnectAll(clients));
 
-  it('connects and receives the game_state singleton in the Lobby phase', async () => {
+  it('connects and receives the game_state and config singletons', async () => {
     const client = await connectClient();
     clients.push(client);
 
     const state = client.conn.db.gameState.id.find(0);
     expect(state).toBeDefined();
-    expect(state!.phase.tag).toBe('Lobby');
-    expect(state!.round).toBe(0);
+    expect(['Lobby', 'Building', 'Scoring', 'Voting', 'Results']).toContain(
+      state!.phase.tag,
+    );
+    expect(client.conn.db.config.id.find(0)).toBeTruthy();
   });
 });

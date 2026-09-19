@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { pieceAt } from '../../src/net/queries';
 import {
   inBounds,
@@ -8,6 +8,7 @@ import {
 } from '../../spacetimedb/src/logic/grid';
 import { PIECE_KINDS } from '../../spacetimedb/src/logic/pieces';
 import {
+  adminCall,
   connectClients,
   disconnectAll,
   waitFor,
@@ -52,6 +53,7 @@ async function joinAll(clients: TestClient[], prefix: string): Promise<void> {
 
 describe('building sync', () => {
   const clients: TestClient[] = [];
+  beforeEach(() => adminCall('reset_game'));
   afterEach(() => disconnectAll(clients));
 
   it('lets exactly one of eight simultaneous placements on the same tile win', async () => {

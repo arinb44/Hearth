@@ -6,17 +6,25 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
+import ConfigureTimingReducer from "../configure_timing_reducer";
 import JoinReducer from "../join_reducer";
 import MoveReducer from "../move_reducer";
 import PlacePieceReducer from "../place_piece_reducer";
 import RemovePieceReducer from "../remove_piece_reducer";
+import ResetGameReducer from "../reset_game_reducer";
 import RotatePieceReducer from "../rotate_piece_reducer";
 import SetNameReducer from "../set_name_reducer";
+import SkipPhaseReducer from "../skip_phase_reducer";
+import StartRoundReducer from "../start_round_reducer";
 
+export type ConfigureTimingParams = __Infer<typeof ConfigureTimingReducer>;
 export type JoinParams = __Infer<typeof JoinReducer>;
 export type MoveParams = __Infer<typeof MoveReducer>;
 export type PlacePieceParams = __Infer<typeof PlacePieceReducer>;
 export type RemovePieceParams = __Infer<typeof RemovePieceReducer>;
+export type ResetGameParams = __Infer<typeof ResetGameReducer>;
 export type RotatePieceParams = __Infer<typeof RotatePieceReducer>;
 export type SetNameParams = __Infer<typeof SetNameReducer>;
+export type SkipPhaseParams = __Infer<typeof SkipPhaseReducer>;
+export type StartRoundParams = __Infer<typeof StartRoundReducer>;
 

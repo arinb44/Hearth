@@ -1,6 +1,7 @@
+import { execFileSync } from 'node:child_process';
 import type { Identity } from 'spacetimedb';
 import { DbConnection } from '../../src/module_bindings';
-import { TEST_DB, TEST_HOST } from './config';
+import { SPACETIME_CLI, TEST_DB, TEST_HOST } from './config';
 
 export interface TestClient {
   conn: DbConnection;
@@ -48,4 +49,15 @@ export async function waitFor(
       throw new Error(`Timed out waiting for: ${label}`);
     await new Promise((r) => setTimeout(r, 20));
   }
+}
+
+/** Calls a reducer as the admin (the CLI identity that published the test module). */
+export function adminCall(reducer: string, ...args: string[]): void {
+  execFileSync(
+    SPACETIME_CLI,
+    ['call', TEST_DB, reducer, ...args, '--server', 'local'],
+    {
+      stdio: 'pipe',
+    },
+  );
 }

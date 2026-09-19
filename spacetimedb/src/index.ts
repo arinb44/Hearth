@@ -1,14 +1,8 @@
 import type { Identity } from 'spacetimedb';
-import {
-  schema,
-  SenderError,
-  t,
-  table,
-  type InferSchema,
-  type ReducerCtx,
-} from 'spacetimedb/server';
+import { SenderError, t } from 'spacetimedb/server';
 import { tileKey } from './logic/grid';
 import { constrainMove, isFiniteVec, normalizeHeading } from './logic/movement';
+import { DEFAULT_TIMING, isValidTiming } from './logic/phases';
 import {
   BUILD_ERROR_MESSAGES,
   checkModify,
@@ -17,85 +11,20 @@ import {
   type BuildError,
 } from './logic/pieces';
 import { pickColorIndex, sanitizeName } from './logic/players';
+import {
+  advance,
+  beginRound,
+  checkEarlyCompletion,
+  ensureLobbyTimer,
+  isCurrentTimer,
+  requireGameState,
+  resetToLobby,
+} from './rounds';
+import { phaseTimer, spacetimedb, type Ctx } from './schema';
 
-const Phase = t.enum('Phase', ['Lobby', 'Building', 'Scoring', 'Results']);
-
-// Singleton row (id 0) describing the shared round state.
-const gameState = table(
-  { name: 'game_state', public: true },
-  {
-    id: t.u8().primaryKey(),
-    phase: Phase,
-    round: t.u32(),
-  },
-);
-
-const player = table(
-  { name: 'player', public: true },
-  {
-    identity: t.identity().primaryKey(),
-    name: t.string(),
-    colorIndex: t.u8(),
-    online: t.bool(),
-    x: t.f32(),
-    z: t.f32(),
-    heading: t.f32(),
-    moveBudget: t.f32(),
-    lastMoveAt: t.timestamp(),
-  },
-);
-
-// Private: one row per live connection, so a player stays online while any tab is open.
-const session = table(
-  { name: 'session' },
-  {
-    connectionId: t.connectionId().primaryKey(),
-    identity: t.identity().index('btree'),
-  },
-);
-
-// The shared board. `tileKey` is unique, so the database itself guarantees at most
-// one piece per tile even when several players click the same tile at once.
-const piece = table(
-  { name: 'piece', public: true },
-  {
-    id: t.u64().primaryKey().autoInc(),
-    tileKey: t.u32().unique(),
-    tileX: t.u8(),
-    tileZ: t.u8(),
-    kind: t.string(),
-    rotation: t.u8(),
-    placedBy: t.identity().index('btree'),
-    placedAt: t.timestamp(),
-    round: t.u32(),
-  },
-);
-
-// Event table: rows are broadcast to subscribers once and never stored client-side.
-// Drives the activity feed and placement effects.
-const activity = table(
-  { name: 'activity', public: true, event: true },
-  {
-    kind: t.string(),
-    actorName: t.string(),
-    colorIndex: t.u8(),
-    pieceKind: t.string(),
-    tileX: t.u8(),
-    tileZ: t.u8(),
-  },
-);
-
-const spacetimedb = schema({ gameState, player, session, piece, activity });
 export default spacetimedb;
 
-type Ctx = ReducerCtx<InferSchema<typeof spacetimedb>>;
 type PlayerRow = ReturnType<typeof requirePlayer>;
-
-function requireGameState(ctx: Ctx) {
-  const state = ctx.db.gameState.id.find(0);
-  if (!state) throw new Error('game_state singleton is missing');
-  return state;
-}
 
 function failIf(error: BuildError | null): void {
   if (error) throw new SenderError(BUILD_ERROR_MESSAGES[error]);
@@ -131,6 +60,12 @@ function requirePlayer(ctx: Ctx) {
   return row;
 }
 
+function requireAdmin(ctx: Ctx): void {
+  if (!ctx.db.admin.identity.find(ctx.sender)) {
+    throw new SenderError('Only the admin can do that');
+  }
+}
+
 function hasSession(ctx: Ctx, identity: Identity): boolean {
   for (const _ of ctx.db.session.identity.filter(identity)) return true;
   return false;
@@ -145,7 +80,20 @@ function colorsInUse(ctx: Ctx, except: Identity): number[] {
 }
 
 export const init = spacetimedb.init((ctx) => {
-  ctx.db.gameState.insert({ id: 0, phase: { tag: 'Lobby' }, round: 0 });
+  ctx.db.admin.insert({ identity: ctx.sender });
+  ctx.db.config.insert({ id: 0, ...DEFAULT_TIMING });
+  ctx.db.gameState.insert({
+    id: 0,
+    phase: { tag: 'Lobby' },
+    mode: { tag: 'Coop' },
+    round: 0,
+    themeTitle: '',
+    challengeId: 0,
+    host: undefined,
+    phaseStartedAt: ctx.timestamp,
+    phaseEndsAt: undefined,
+    teamScore: 0,
+  });
 });
 
 export const onConnect = spacetimedb.clientConnected((ctx) => {
@@ -163,6 +111,7 @@ export const onConnect = spacetimedb.clientConnected((ctx) => {
       ? pickColorIndex(used)
       : existing.colorIndex;
     ctx.db.player.identity.update({ ...existing, online: true, colorIndex });
+    ensureLobbyTimer(ctx);
   }
 });
 
@@ -181,20 +130,21 @@ export const join = spacetimedb.reducer(
     const existing = ctx.db.player.identity.find(ctx.sender);
     if (existing) {
       ctx.db.player.identity.update({ ...existing, name: clean, online: true });
-      return;
+    } else {
+      const created = ctx.db.player.insert({
+        identity: ctx.sender,
+        name: clean,
+        colorIndex: pickColorIndex(colorsInUse(ctx, ctx.sender)),
+        online: true,
+        x: (ctx.random() - 0.5) * 6,
+        z: (ctx.random() - 0.5) * 6,
+        heading: 0,
+        moveBudget: 0,
+        lastMoveAt: ctx.timestamp,
+      });
+      logActivity(ctx, created, 'joined');
     }
-    const created = ctx.db.player.insert({
-      identity: ctx.sender,
-      name: clean,
-      colorIndex: pickColorIndex(colorsInUse(ctx, ctx.sender)),
-      online: true,
-      x: (ctx.random() - 0.5) * 6,
-      z: (ctx.random() - 0.5) * 6,
-      heading: 0,
-      moveBudget: 0,
-      lastMoveAt: ctx.timestamp,
-    });
-    logActivity(ctx, created, 'joined');
+    ensureLobbyTimer(ctx);
   },
 );
 
@@ -264,6 +214,7 @@ export const placePiece = spacetimedb.reducer(
       round: state.round,
     });
     logActivity(ctx, me, 'placed', kind, tileX, tileZ);
+    checkEarlyCompletion(ctx);
   },
 );
 
@@ -299,5 +250,54 @@ export const removePiece = spacetimedb.reducer(
     const { me, existing } = requireModifiable(ctx, tileX, tileZ);
     ctx.db.piece.id.delete(existing.id);
     logActivity(ctx, me, 'removed', existing.kind, tileX, tileZ);
+    checkEarlyCompletion(ctx);
   },
 );
+
+/** Any joined player can start the next round from the lobby. */
+export const startRound = spacetimedb.reducer((ctx) => {
+  requirePlayer(ctx);
+  if (requireGameState(ctx).phase.tag !== 'Lobby') {
+    throw new SenderError('A round is already running');
+  }
+  beginRound(ctx);
+});
+
+/** Fired by `phase_timer`; never callable by clients. */
+export const advancePhase = spacetimedb.reducer(
+  { onSchedule: phaseTimer },
+  { timer: phaseTimer.rowType },
+  (ctx, { timer }) => {
+    if (!ctx.sender.equals(ctx.databaseIdentity)) {
+      throw new SenderError('Phases advance on their own');
+    }
+    if (isCurrentTimer(ctx, timer)) advance(ctx);
+  },
+);
+
+export const configureTiming = spacetimedb.reducer(
+  {
+    lobbySeconds: t.u32(),
+    buildSeconds: t.u32(),
+    scoringSeconds: t.u32(),
+    votingSeconds: t.u32(),
+    resultsSeconds: t.u32(),
+  },
+  (ctx, timing) => {
+    requireAdmin(ctx);
+    if (!isValidTiming(timing)) throw new SenderError('Invalid timing');
+    ctx.db.config.id.update({ id: 0, ...timing });
+  },
+);
+
+/** Admin demo control: end the current phase now. */
+export const skipPhase = spacetimedb.reducer((ctx) => {
+  requireAdmin(ctx);
+  advance(ctx);
+});
+
+/** Admin demo control: clear the board and return to an idle lobby. */
+export const resetGame = spacetimedb.reducer((ctx) => {
+  requireAdmin(ctx);
+  resetToLobby(ctx);
+});

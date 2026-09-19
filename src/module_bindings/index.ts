@@ -34,20 +34,26 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import ConfigureTimingReducer from "./configure_timing_reducer";
 import JoinReducer from "./join_reducer";
 import MoveReducer from "./move_reducer";
 import PlacePieceReducer from "./place_piece_reducer";
 import RemovePieceReducer from "./remove_piece_reducer";
+import ResetGameReducer from "./reset_game_reducer";
 import RotatePieceReducer from "./rotate_piece_reducer";
 import SetNameReducer from "./set_name_reducer";
+import SkipPhaseReducer from "./skip_phase_reducer";
+import StartRoundReducer from "./start_round_reducer";
 
 // Import all procedure arg schemas
 
 // Import all table schema definitions
 import ActivityRow from "./activity_table";
+import ConfigRow from "./config_table";
 import GameStateRow from "./game_state_table";
 import PieceRow from "./piece_table";
 import PlayerRow from "./player_table";
+import RoundResultRow from "./round_result_table";
 
 /** Type-only namespace exports for generated type groups. */
 
@@ -61,6 +67,17 @@ const tablesSchema = __schema({
     ],
     event: true,
   }, ActivityRow),
+  config: __table({
+    name: 'config',
+    indexes: [
+      { accessor: 'id', name: 'config_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'config_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, ConfigRow),
   gameState: __table({
     name: 'game_state',
     indexes: [
@@ -101,16 +118,31 @@ const tablesSchema = __schema({
       { name: 'player_identity_key', constraint: 'unique', columns: ['identity'] },
     ],
   }, PlayerRow),
+  roundResult: __table({
+    name: 'round_result',
+    indexes: [
+      { accessor: 'round', name: 'round_result_round_idx_btree', algorithm: 'btree', columns: [
+        'round',
+      ] },
+    ],
+    constraints: [
+      { name: 'round_result_round_key', constraint: 'unique', columns: ['round'] },
+    ],
+  }, RoundResultRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("configure_timing", ConfigureTimingReducer),
   __reducerSchema("join", JoinReducer),
   __reducerSchema("move", MoveReducer),
   __reducerSchema("place_piece", PlacePieceReducer),
   __reducerSchema("remove_piece", RemovePieceReducer),
+  __reducerSchema("reset_game", ResetGameReducer),
   __reducerSchema("rotate_piece", RotatePieceReducer),
   __reducerSchema("set_name", SetNameReducer),
+  __reducerSchema("skip_phase", SkipPhaseReducer),
+  __reducerSchema("start_round", StartRoundReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */

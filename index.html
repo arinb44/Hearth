@@ -14,6 +14,22 @@
       <div id="status" class="pill" data-status="connecting">Connecting…</div>
       <ul id="feed"></ul>
       <aside id="players" class="panel" hidden></aside>
+      <section id="round" hidden>
+        <div class="round-top">
+          <span id="round-phase"></span>
+          <span id="round-timer"></span>
+        </div>
+        <h2 id="round-title"></h2>
+        <p id="round-blurb"></p>
+        <ul id="round-targets"></ul>
+        <div id="round-lobby" hidden>
+          <button id="start-round" type="button">Start round</button>
+        </div>
+      </section>
+      <div id="banner" hidden></div>
+      <div id="results" class="overlay passive" hidden>
+        <div class="card results-card"></div>
+      </div>
       <div id="toast" role="status"></div>
       <nav id="palette" hidden></nav>
       <div id="hint">

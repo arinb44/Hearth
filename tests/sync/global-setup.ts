@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { SPACETIME_CLI, TEST_DB } from './config';
+import { SPACETIME_CLI, TEST_DB, TEST_TIMING } from './config';
 
 function run(args: string[]): void {
   execFileSync(SPACETIME_CLI, args, { stdio: 'inherit' });
@@ -34,5 +34,21 @@ export default function setup(): void {
     'local',
     '--delete-data=always',
     '--yes',
+  ]);
+  // The CLI identity published the module, so it is the admin.
+  const t = TEST_TIMING;
+  run([
+    'call',
+    TEST_DB,
+    'configure_timing',
+    ...[
+      t.lobbySeconds,
+      t.buildSeconds,
+      t.scoringSeconds,
+      t.votingSeconds,
+      t.resultsSeconds,
+    ].map(String),
+    '--server',
+    'local',
   ]);
 }

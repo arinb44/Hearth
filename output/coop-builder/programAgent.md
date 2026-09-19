@@ -12,9 +12,13 @@
 Build a good-looking multiplayer co-op building game that meets the "Best use of Spacetime" track requirements: SpacetimeDB is the core real-time backend, not an add-on. The full game flow must work live in front of the judges, with up to 10 players at once.
 
 - **SpacetimeDB at the core:** all shared state lives in SpacetimeDB tables (players, avatar positions, placed pieces, rounds, scores). Every change goes through server reducers, and clients render only from live subscriptions.
-- **Timed build challenges:** rounds with a theme or target, a countdown run by the server, and a shared score.
+- **Timed rounds in two modes, chosen by a live lobby vote:**
+  - **Co-op Challenge:** preset targets, scored by the server.
+  - **Build Battle:** a popular theme or a player-submitted idea; each builder gets a personal plot, then everyone votes for the best build.
+
+  Every countdown runs on the server.
 - **Low-poly 3D world:** a tile terrain where players place and remove prefab pieces (trees, houses, rocks, paths, etc.), with walking low-poly avatars that show name tags.
-- **Easy to join:** players open a public URL on laptops (mouse and keyboard) or phones (touch). The module is hosted on the Maincloud free tier.
+- **Easy to join:** players open a public URL on laptops (mouse and keyboard). The module is hosted on the Maincloud free tier. *(Phone support was dropped on 2026-10-04 to make room for Build Battle.)*
 
 ## Specialization
 *From: "What do I specialize in?"*
@@ -22,12 +26,12 @@ Build a good-looking multiplayer co-op building game that meets the "Best use of
 - **Languages:** TypeScript, for both the server module and the client. The user first chose C++ for the module, then switched to TypeScript to reduce toolchain risk.
 - **Frameworks / libraries:** SpacetimeDB 2.x (TypeScript server module and TypeScript client SDK) and Three.js. Build tooling and any UI framework are chosen in the plan with the user's approval.
 - **Area of expertise:** real-time multiplayer game development, server-authoritative shared state, 3D web rendering.
-- **Target platform:** web browsers on desktop and mobile. Backend on SpacetimeDB Maincloud (free tier); local `spacetime start` for development and tests.
+- **Target platform:** desktop web browsers. Backend on SpacetimeDB Maincloud (free tier); local `spacetime start` for development and tests.
 
 ## Focus
 *From: "What should I focus on?"*
 
-- **Features / tasks:** live player presence and avatar movement; placing and removing pieces with server-side validation; the round/challenge system (theme, countdown, scoring, results); desktop and touch controls; low-poly visual polish.
+- **Features / tasks:** live player presence and avatar movement; placing and removing pieces with server-side validation; the round/challenge system (theme, countdown, scoring, results); the lobby theme vote with player ideas; Build Battle (plots, voting); laptop controls; low-poly visual polish.
 - **Files / modules in scope:** everything inside `spacetime-market\` (the server module, the web client, tests, config, README) and the docs in `spacetime-market\output\coop-builder\`. The exact layout is set in the plan.
 - **Priorities:**
   1. Live sync correctness: every client converges on the same state, with no lost or duplicated actions.
@@ -48,7 +52,7 @@ Build a good-looking multiplayer co-op building game that meets the "Best use of
 - **Compatibility:**
   - Windows 11 dev machine; only `git` and `winget` are installed at the start.
   - SpacetimeDB 2.x.
-  - Current desktop Chrome, Edge and Safari, plus mobile browsers (iOS Safari, Android Chrome).
+  - Current desktop Chrome, Edge and Safari (phones out of scope).
 - **Other:**
   - About 12 hours in total, solo.
   - Must run smoothly with 10 concurrent players.
@@ -86,8 +90,8 @@ Build a good-looking multiplayer co-op building game that meets the "Best use of
 
 ## Success Criteria
 The work is done when:
-- Up to 10 players on laptops and phones can open the public URL, see each other's avatars move live, and build together in the same world, with the module hosted on the Maincloud free tier.
-- A full timed challenge round runs from start to finish (start → countdown → scoring → results) with all clients in sync.
+- Up to 10 players on laptops can open the public URL, see each other's avatars move live, and build together in the same world, with the module hosted on the Maincloud free tier.
+- A full co-op round (start → countdown → scoring → results) and a full Build Battle round (theme vote → building in plots → voting → results) run from start to finish with all clients in sync.
 - All shared game state lives in SpacetimeDB and changes only through reducers. A client that disconnects and reconnects sees the correct current state.
 - The multi-client sync test passes, showing that clients acting at the same time converge on the same state.
 - Only free services and free-licensed assets are used.

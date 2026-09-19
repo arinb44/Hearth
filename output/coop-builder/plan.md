@@ -4,7 +4,9 @@
 **Coop Builder:** a low-poly 3D multiplayer game where up to 10 players race the clock to complete building challenges together. All shared state and game logic run in SpacetimeDB.
 
 ## Objective
-Build a browser game where up to 10 players, on laptops or phones, join a shared low-poly island. They walk around as avatars and place prefab pieces (houses, trees, rocks, paths, and so on) on a tile grid to complete timed build challenges.
+Build a browser game where up to 10 players on laptops join a shared low-poly island. They walk around as avatars and place prefab pieces (houses, trees, rocks, paths, and so on) on a tile grid. Each round runs in one of two modes, chosen by a live lobby vote:
+- **Co-op Challenge:** everyone builds together toward a preset target list, and the server scores the result.
+- **Build Battle:** a popular theme or a player-submitted idea. Each builder works in a personal plot, then everyone votes for the best build.
 
 SpacetimeDB is the entire backend:
 - Every player, piece, round, timer and score is a table row.
@@ -20,25 +22,40 @@ The module is hosted on the Maincloud free tier, and the static web client is ho
 3. **Live movement.** Each player's avatar movement appears on every other client, interpolated so it looks smooth. The server rejects positions outside the island and movement faster than the speed limit.
 4. **Building.** Players place, rotate and remove pieces on the tile grid. The server enforces: inside bounds, one piece per tile, a valid piece kind, and the phase rules. Rejected actions show visible feedback on the client.
 5. **Race on the same tile.** When several players place on the same tile at the same moment, exactly one placement succeeds, the others are rejected, and every client converges on the same state.
-6. **Rounds run on the server.** Each round goes Lobby → Building (countdown) → Scoring → Results → Lobby, driven entirely by scheduled reducers. All clients show the same phase, and countdowns agree within about 1 second.
-7. **Challenges and scoring.** Every round has a challenge (a theme and targets). The server computes the team score at the end of the round. The results screen shows the score and what each player contributed.
+6. **Rounds run on the server.** Co-op rounds go Lobby → Building (120 s countdown) → Scoring → Results → Lobby. Battle rounds go Lobby → Building → Voting → Results → Lobby. Every transition is driven by scheduled reducers. All clients show the same phase, and countdowns agree within about 1 second.
+7. **Co-op challenges and scoring.** There are four preset challenges, each a theme plus targets: Cozy Village, Forest Camp, Castle Lookout, Flower Park.
+   - Live target progress is visible to everyone.
+   - The server computes the team score: up to 100 for target completion, plus up to 50 time bonus when every target is met early, which ends the round right away.
+   - The results screen shows the score and what each player contributed.
 8. **Activity feed.** Feed entries and placement effects ("Sam placed a House") come from an event table (new in 2.0), not from client-side guesses.
 9. **10 players.** 10 concurrent players on Maincloud with no visible lag. Verified with a 10-bot script plus real devices.
-10. **Laptops and phones.** On laptops: WASD to move, mouse to place and remove, keys to rotate and select pieces. On phones: a touch joystick, tap to place, and a piece palette. Must work in current Chrome, Edge and Safari, including iOS Safari and Android Chrome.
+10. **Laptops.** WASD to move, mouse to place and remove, keys to rotate and select pieces. Must work in current desktop Chrome, Edge and Safari. *(Phone support was dropped on 2026-10-04 to make room for Build Battle.)*
 11. **Reconnecting.** A client that drops and reconnects sees the correct current state and keeps its identity.
 12. **Hosting.** The module runs on the Maincloud free tier and the client is reachable at a public URL. No paid services.
-13. **Look and feel.** A consistent low-poly look: one palette, sky and lighting, soft shadows (with a quality toggle for phones), simple animations.
+13. **Look and feel.** A consistent low-poly look: one palette, sky and lighting, soft shadows, simple animations.
 14. **Tests.** Vitest unit tests cover the game rules. An automated sync test with several clients covers convergence, the same-tile race, rounds and reconnecting. All tests pass.
 15. **README.** Covers setup, local development, deployment, how players join, and asset credits.
+16. **Lobby theme vote and player ideas.**
+    - In the Lobby, every player can vote (one vote each, changeable) for the next theme: the 4 co-op challenges, popular battle themes (Haunted Forest, Royal Castle, Zen Garden, Seaside Village, Tiny Town), or player ideas.
+    - Any player can submit one free-text idea (cleaned up, at most 40 characters), and it becomes a vote option for everyone.
+    - The tally updates live on every client. When the round starts (Start button or 30 s auto-start), the most-voted option wins, and the server breaks ties at random.
+17. **Build Battle.**
+    - The island splits into 9 plots (3×3, each 8×8 tiles), and each builder is assigned one at round start.
+    - If a player's idea won, its author **hosts**: they don't build, but they vote. Players beyond 9 builders spectate and vote.
+    - During Building, players can only place pieces in their own plot (enforced by the server).
+    - Then comes a 25 s **Voting** phase: each player votes for one plot that isn't their own, and can change the vote.
+    - The server tallies the votes. The most votes wins, and ties share the win. The results show winners and vote counts.
 
 ## Scope
 **In scope**
 - A new project in `spacetime-market\`: the TypeScript SpacetimeDB module, the TypeScript + Three.js web client, tests, a bot script, deployment config and the README.
-- One shared world with a repeating round loop.
-- Controls for laptops and phones.
+- One shared world with a repeating round loop, in two modes (Co-op Challenge, Build Battle), plus a lobby theme vote and player ideas.
+- Laptop controls (keyboard + mouse).
 - Publishing to Maincloud and to a free static host.
 
 **Out of scope**
+- Phone and touch support (dropped 2026-10-04).
+- Moderation of player-submitted ideas beyond cleanup and the length limit.
 - Paid services, accounts with passwords (SpacetimeDB's anonymous identity plus a nickname is used instead), and chat.
 - Multiple simultaneous lobbies or rooms, matchmaking, and saving worlds between rounds (unless decision D4 chooses that).
 - C++, Rust or C# modules. AI or third-party APIs.
@@ -48,7 +65,7 @@ The module is hosted on the Maincloud free tier, and the static web client is ho
 
 ### Architecture
 ```
- Browser (laptop / phone)                      SpacetimeDB on Maincloud (free tier)
+ Browser (laptop)                              SpacetimeDB on Maincloud (free tier)
  ┌───────────────────────────┐   WebSocket     ┌───────────────────────────────────────┐
  │ Three.js scene            │ ◄─subscriptions─│ tables: player, piece, game_state,    │
  │  renders ONLY from the    │                 │         activity (event), phase_timer │
@@ -74,7 +91,15 @@ The module is hosted on the Maincloud free tier, and the static web client is ho
 | `game_state` (public) | `id` = 0 (singleton), `phase` (enum), `round`, `challenge_id`, `phase_started_at`, `phase_ends_at`, `team_score` | Drives HUD and round flow |
 | `round_result` (public) | `round` (PK), `challenge_id`, `team_score`, per-target breakdown | Results screen and history |
 | `activity` (public, **event**) | `kind`, `actor`, `text`, `tile_x`, `tile_z` | Feed and effects; not stored long-term |
-| `phase_timer` (schedule) | `scheduled_id`, `scheduled_at` | One-shot timer that fires `advance_phase` |
+| `phase_timer` (schedule) | `scheduled_id`, `scheduled_at`, `round`, `phase` | One-shot timer that fires `advance_phase`; ignored if the round or phase has already moved on |
+| `config` (public) | singleton: lobby / build / scoring / voting / results seconds | Round timing; only the admin can change it |
+| `admin` (private) | `identity` | The publisher's identity, recorded in `init`; can change timing, skip a phase, reset |
+| `idea` (public) | `id`, `author` (unique), `author_name`, `text` | Player-submitted battle ideas, one per player |
+| `theme_vote` (public) | `voter` (PK), `option` (e.g. `challenge:0`, `battle:2`, `idea:17`) | Live lobby vote |
+| `plot` (public) | `builder` (PK), `plot_index` (unique) | Battle plot assignment for the current round |
+| `plot_vote` (public) | `voter` (PK), `plot_index` | Battle voting |
+
+The `game_state` row also gets `mode` (Coop / Battle), `theme_title`, `challenge_id`, an optional `host`, `phase_started_at`, an optional `phase_ends_at`, and `team_score`. The `Phase` enum adds `Voting`.
 
 Piece kinds and challenge definitions are typed constants in `spacetimedb/src/logic/`. Each challenge has a theme, a target list such as "≥ 4 houses, ≥ 6 trees, 1 well, every house next to a path", and a time limit.
 
@@ -85,7 +110,7 @@ Piece kinds and challenge definitions are typed constants in `spacetimedb/src/lo
 - Built with Vite, plain TypeScript and Three.js.
 - `net/` sets up the connection and stores the auth token in `localStorage`.
 - `scene/` contains the terrain, water, sky and lights; avatars with interpolation; piece meshes with object pooling; a ghost preview for placement; and particle effects.
-- `input/` handles desktop controls (WASD, mouse raycast to pick a tile, Q/E to rotate, 1–9 to pick a piece, right-click to remove) and touch controls (virtual joystick, tap to place, buttons).
+- `input/` handles desktop controls (WASD, mouse raycast to pick a tile, Q/E to rotate, 1–9 to pick a piece, right-click to remove).
 - `ui/` is an HTML/CSS overlay: join screen, challenge card, countdown, team score, player list, activity feed, piece palette, results screen, quality toggle.
 - The database URI and name come from Vite environment variables: `VITE_STDB_URI`, plus `VITE_STDB_DB`, the database name.
 
@@ -101,7 +126,9 @@ All files are new except the two already in the repo.
 | `src/main.ts` | Client entry point and app wiring |
 | `src/net/connection.ts` | `DbConnection` setup, token storage, subscriptions, reconnect |
 | `src/scene/{world,terrain,avatars,pieces,effects,quality}.ts` | Three.js rendering |
-| `src/input/{desktop,touch}.ts` | Controls |
+| `src/input/{desktop,pointer}.ts` | Keyboard movement and mouse tile picking |
+| `spacetimedb/src/logic/{challenges,scoring,themes,plots,phases}.ts` | Co-op challenges and scoring, theme vote options and tally, battle plots, phase timing |
+| `src/ui/{hud,lobby,results,battle}.ts` | Countdown + challenge checklist, theme vote and ideas, results screen, plot labels and voting |
 | `src/ui/{join,hud,palette,feed,results}.ts`, `src/ui/styles.css` | HTML overlay |
 | `src/module_bindings/**` | **Generated** by `spacetime generate`; never edited by hand |
 | `public/assets/**`, `public/assets/CREDITS.md` | Low-poly models, if D5 picks downloaded CC0 assets |
@@ -137,24 +164,29 @@ Each one is installed only after you approve it. Nothing paid.
   3. Many distinct placements from many clients at once are all present on every client.
   4. A short full round (Lobby → Building → Scoring → Results) gives every client the same phase, the same `phase_ends_at` and the same score.
   5. A reconnect with the saved token keeps the identity and sees current state.
+  6. Theme vote: ideas and votes show up on every client, and Start picks the most-voted option.
+  7. A short Build Battle round: plots are assigned, building outside your own plot is rejected, the host can't build, the voting tally lands in `round_result` with the correct winner, and nobody can vote for their own plot.
+
+  The sync tests shorten round timing through the admin-only `configure_timing` reducer. The test setup calls it with the CLI (publisher) identity, and auto-start is turned off so rounds never start in the middle of other tests.
 
   The sync tests need a local server started with `spacetime start`. If none is running they **fail loudly**; they never skip silently.
 - **`npm test`** runs both suites. Results, with pass and fail counts, are reported after every milestone.
-- **Load and rehearsal (manual, M4 and M7).** `npm run bots -- --count 10 --target maincloud` moves bots around and has them build, while I watch for lag and errors in `spacetime logs`. Then a real-device check with phones and laptops.
+- **Load and rehearsal (manual, M4 and M7).** `npm run bots -- --count 10 --target maincloud` moves bots around and has them build, while I watch for lag and errors in `spacetime logs`. Then a check with several laptops and tabs.
 
 ## Milestones
-Time estimates total about 11 hours plus 1 hour of buffer. **Cut line:** M0–M4 give a working, deployed multiplayer game. M5–M7 add the phone controls, polish and hardening, and get trimmed first if time runs short. If they are trimmed, I'll warn you that phone support (a success criterion) is at risk.
+Time estimates total about 11.5 hours with a small buffer. **Cut line:** M0–M4 give a working, deployed game with both modes. M6–M7 add polish and hardening, and get trimmed first if time runs short.
 
 | # | Milestone | Ends with (working + tested) | Est. |
 |---|---|---|---|
 | **M0** | **Setup:** install Node and the CLI (approved), set up git on top of the existing `main` (D7), scaffold the module and the Vite + Three.js client, add Vitest and Prettier, run one smoke test | `npm test` runs; local server works; empty scene renders | 0.75 h |
 | **M1** | **Presence and movement:** `player` and `game_state` tables, lifecycle reducers, `join` / `set_name` / `move`; client connects, saves its token and renders the island with placeholder avatars; local prediction plus interpolation of others | Unit tests (movement) and sync tests 1 and 5 pass; two browser tabs see each other move | 1.5 h |
 | **M2** | **Building:** piece catalog, `place_piece` / `rotate_piece` / `remove_piece` with the unique `tile_key`; palette, ghost preview, raycast tile picking; `activity` event table driving the feed and effects | Unit tests (placement) and sync tests 2 and 3 pass | 1.5 h |
-| **M3** | **Timed challenges:** phase state machine on one-shot scheduled reducers, challenge definitions, server-side scoring, `round_result`; HUD with countdown, challenge card, score and results screen | Unit tests (phases, scoring) and sync test 4 pass | 1.75 h |
+| **M3a** | **Round engine + co-op challenges:** phase state machine on one-shot scheduled reducers, `config`/`admin` tables, the 4 challenges, server scoring with early completion, `round_result`; HUD with countdown, live challenge checklist, results screen | Unit tests (phases, scoring) and sync test 4 pass | 1.75 h |
+| **M3b** | **Theme vote + Build Battle:** `idea`/`theme_vote` tables and lobby vote UI; battle mode with `plot` assignment, plot-only building, plot labels, `Voting` phase with `plot_vote`, winners in `round_result` | Unit tests (plots, tally, battle rules) and sync tests 6–7 pass | 2 h |
 | **M4** | **Deploy:** environment config, publish to Maincloud (after your `spacetime login`), frontend on the free host (D6), README; 10-bot run against Maincloud | Public URL plays end to end; bots run without errors | 1 h |
-| — | *Cut line: demoable MVP (about 6.5 h)* | | |
-| **M5** | **Phones:** touch joystick, tap to place, responsive HUD, quality toggle (pixel-ratio cap, shadows off) | Tested on a real phone and a laptop together | 1.25 h |
-| **M6** | **Visual polish:** final low-poly assets (D5), lighting, water, particles, avatar walk cycle, results celebration | Looks consistent; frame rate holds on a phone | 1.5 h |
+| — | *Cut line: demoable game with both modes* | | |
+| ~~M5~~ | ~~Phones~~: removed 2026-10-04 (phone support dropped) | — | — |
+| **M6** | **Visual polish:** final low-poly assets (D5), lighting, water, particles, avatar walk cycle, results celebration | Looks consistent on laptops | 1.5 h |
 | **M7** | **Demo hardening:** reconnect UX, cleanup of idle and offline players, host-only reset / skip-phase reducer, full rehearsal (10 bots + devices), demo script in the README | All tests pass; rehearsal checklist done | 0.75 h |
 
 Each milestone ends with: tests run and reported → list of changed files and a Conventional Commit message → commit after your OK → push to `arinb44/SpacetimeDemoMHacks` (`main`) after your OK.
@@ -173,6 +205,9 @@ I'll ask about these with options and a recommendation. D1, D2, D5, D6 and D7 sh
 | D7 | Git setup with the existing `README.md` + `LICENSE` commit | **`git init`, add `origin`, fetch, and build local `main` on top of `origin/main`** (keeps your commit, no force-push) / clone the repo into a fresh folder and move the docs over |
 | D8 | Who starts rounds | **Any player presses "Start" in the lobby, with an auto-start after 30 s if anyone is present** / host only (first player) / fully automatic loop |
 | D9 | Commit the `output/coop-builder/` docs to the repo? | Commit them / keep them local (add to `.gitignore`) |
+| D10 | How the theme is chosen | **Live lobby vote** (chosen) / host picks / random |
+| D11 | How player-idea battles are judged | **Personal plots + everyone votes** (chosen) / host judges / co-op build then rate |
+| D12 | What gives way for the extra ~2 h | **Drop phone support** (chosen) / trim polish / use buffer |
 
 ## Risks & Limitations
 - **SpacetimeDB 2.0 is new.** TypeScript modules and event tables are recent features, so details in the docs may not match the installed version. *Mitigation:* scaffold from the official template, build against the generated bindings, and check behavior in M0–M1 before building on it.
@@ -180,9 +215,10 @@ I'll ask about these with options and a recommendation. D1, D2, D5, D6 and D7 sh
   - Databases **pause after inactivity**, and the first connection wakes them up. *Mitigation:* open the game a few minutes before judging.
   - The exact energy cost per reducer is unknown (the free tier gives 2,500 TeV per month). *Mitigation:* movement updates only while moving, at about 10 Hz; no server tick; measure during the bot run.
 - **Venue network.** Hackathon Wi-Fi or cell latency can make movement look jumpy. Interpolation hides most of it. Confirmed reads are on by default in 2.0, which adds a little latency; client prediction keeps local movement instant.
-- **Phone performance.** Shadows and high pixel ratios can drop the frame rate. *Mitigation:* a quality toggle, pooled meshes, and a small grid (about 24×24).
-- **Clock skew** between phones and the server could shift countdowns. *Mitigation:* use server timestamps plus an estimated offset; never let the client decide when a phase ends.
-- **Time budget.** About 12 hours solo for a 3D game is tight. *Mitigation:* the cut line, with the MVP first; M6 polish shrinks before M5 phone support.
+- **Player ideas are free text shown to everyone.** *Mitigation:* cleanup, a 40-character limit, one idea per player, and an admin `reset` reducer. No profanity filter (out of scope).
+- **Low-end laptops.** Shadows can cost frame rate. *Mitigation:* shared geometry, a small grid (24×24), a pixel-ratio cap.
+- **Clock skew** between laptops and the server could shift countdowns. *Mitigation:* use server timestamps plus an estimated offset; never let the client decide when a phase ends.
+- **Time budget.** About 12 hours solo for a 3D game is tight. *Mitigation:* the cut line, with both modes deployed first; M6 polish shrinks before anything else.
 - **Windows tooling.** Installers might need a new terminal for `PATH` changes or admin rights. I'll report errors rather than work around them.
 - **Existing remote commit.** It must be built on, not overwritten. Never force-push.
 
@@ -193,4 +229,4 @@ I'll ask about these with options and a recommendation. D1, D2, D5, D6 and D7 sh
 4. Any **challenge themes** you want, e.g. "Cozy Village", "Lighthouse Harbor", "Forest Camp"? Otherwise I'll draft 3–4 for you to approve in M3.
 
 ---
-**Status:** Approved on 2026-10-04. The user chose "go with your recommendations" for decision points D1–D8, so those are adopted as listed (see `decisions.md`).
+**Status:** Revision 1 approved on 2026-10-04 (D1–D8 per recommendations). **Revision 2 approved on 2026-10-04.** It adds a lobby theme vote, player ideas and Build Battle (requirements 16–17, M3b; D10–D11), and drops phone support (requirement 10, M5 removed; D12).

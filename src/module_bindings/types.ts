@@ -20,23 +20,73 @@ export const Activity = __t.object("Activity", {
 });
 export type Activity = __Infer<typeof Activity>;
 
+export const Admin = __t.object("Admin", {
+  identity: __t.identity(),
+});
+export type Admin = __Infer<typeof Admin>;
+
+export const Config = __t.object("Config", {
+  id: __t.u8(),
+  lobbySeconds: __t.u32(),
+  buildSeconds: __t.u32(),
+  scoringSeconds: __t.u32(),
+  votingSeconds: __t.u32(),
+  resultsSeconds: __t.u32(),
+});
+export type Config = __Infer<typeof Config>;
+
+export const Contribution = __t.object("Contribution", {
+  name: __t.string(),
+  colorIndex: __t.u8(),
+  pieces: __t.u16(),
+  votes: __t.u16(),
+});
+export type Contribution = __Infer<typeof Contribution>;
+
 export const GameState = __t.object("GameState", {
   id: __t.u8(),
   get phase() {
     return Phase;
   },
+  get mode() {
+    return Mode;
+  },
   round: __t.u32(),
+  themeTitle: __t.string(),
+  challengeId: __t.u8(),
+  host: __t.option(__t.identity()),
+  phaseStartedAt: __t.timestamp(),
+  phaseEndsAt: __t.option(__t.timestamp()),
+  teamScore: __t.u32(),
 });
 export type GameState = __Infer<typeof GameState>;
+
+// The tagged union or sum type for the algebraic type `Mode`.
+export const Mode = __t.enum("Mode", {
+  Coop: __t.unit(),
+  Battle: __t.unit(),
+});
+export type Mode = __Infer<typeof Mode>;
 
 // The tagged union or sum type for the algebraic type `Phase`.
 export const Phase = __t.enum("Phase", {
   Lobby: __t.unit(),
   Building: __t.unit(),
   Scoring: __t.unit(),
+  Voting: __t.unit(),
   Results: __t.unit(),
 });
 export type Phase = __Infer<typeof Phase>;
+
+export const PhaseTimer = __t.object("PhaseTimer", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  round: __t.u32(),
+  get phase() {
+    return Phase;
+  },
+});
+export type PhaseTimer = __Infer<typeof PhaseTimer>;
 
 export const Piece = __t.object("Piece", {
   id: __t.u64(),
@@ -63,6 +113,23 @@ export const Player = __t.object("Player", {
   lastMoveAt: __t.timestamp(),
 });
 export type Player = __Infer<typeof Player>;
+
+export const RoundResult = __t.object("RoundResult", {
+  round: __t.u32(),
+  get mode() {
+    return Mode;
+  },
+  themeTitle: __t.string(),
+  challengeId: __t.u8(),
+  score: __t.u32(),
+  completed: __t.bool(),
+  stars: __t.u8(),
+  get contributions() {
+    return __t.array(Contribution);
+  },
+  endedAt: __t.timestamp(),
+});
+export type RoundResult = __Infer<typeof RoundResult>;
 
 export const Session = __t.object("Session", {
   connectionId: __t.connectionId(),

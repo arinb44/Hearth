@@ -7,9 +7,12 @@ import type { Player } from '../module_bindings/types';
 import { Avatar } from '../scene/avatars';
 import { PieceLayer } from '../scene/pieces';
 import type { World } from '../scene/world';
+import { ServerClock } from '../net/clock';
 import { ActivityFeed } from '../ui/feed';
+import { RoundHud } from '../ui/hud';
 import { JoinScreen } from '../ui/join';
 import { PlayerList } from '../ui/players';
+import { ResultsView } from '../ui/results';
 import { Toast } from '../ui/toast';
 import { Builder } from './builder';
 import { LocalPlayer } from './localPlayer';
@@ -27,6 +30,9 @@ export class Game {
   private readonly pieces: PieceLayer;
   private readonly builder: Builder;
   private readonly feed = new ActivityFeed();
+  private readonly clock = new ServerClock();
+  private readonly hud: RoundHud;
+  private readonly results: ResultsView;
   private readonly myHex: string;
   private readonly followTarget = new THREE.Vector3();
   private local: LocalPlayer | null = null;
@@ -48,10 +54,32 @@ export class Game {
       () => this.local?.pos ?? null,
     );
 
-    conn.db.piece.onInsert((_ctx, row) => this.pieces.upsert(row));
+    this.hud = new RoundHud(conn, this.clock, async () => {
+      await conn.reducers.startRound({});
+    });
+    this.results = new ResultsView(conn);
+
+    conn.db.piece.onInsert((_ctx, row) => {
+      this.pieces.upsert(row);
+      this.hud.refresh();
+    });
     conn.db.piece.onUpdate((_ctx, _old, row) => this.pieces.upsert(row));
-    conn.db.piece.onDelete((_ctx, row) => this.pieces.remove(row));
+    conn.db.piece.onDelete((_ctx, row) => {
+      this.pieces.remove(row);
+      this.hud.refresh();
+    });
+    conn.db.gameState.onUpdate((_ctx, old, row) => {
+      if (old.phase.tag !== row.phase.tag || old.round !== row.round) {
+        // A fresh transition: its start time is a server timestamp from just now.
+        this.clock.sample(row.phaseStartedAt.microsSinceUnixEpoch);
+        this.results.onPhase(row.phase.tag, row.round);
+      }
+      this.hud.refresh();
+    });
     for (const row of conn.db.piece.iter()) this.pieces.upsert(row);
+    this.hud.refresh();
+    const initial = conn.db.gameState.id.find(0);
+    if (initial) this.results.onPhase(initial.phase.tag, initial.round);
     conn.db.activity.onInsert((_ctx, event) => this.feed.add(event));
 
     conn.db.player.onInsert((_ctx, row) => this.onPlayer(row));
@@ -77,6 +105,7 @@ export class Game {
     for (const avatar of this.avatars.values()) avatar.update(dt);
     this.pieces.update(dt);
     this.builder.update();
+    this.hud.tick();
 
     const me = this.avatars.get(this.myHex);
     this.world.follow(me ? this.followTarget.copy(me.root.position) : null, dt);
@@ -99,6 +128,14 @@ export class Game {
         avatar.setLook(row.name, colorOf(row));
       }
 
+      if (
+        isMe &&
+        (!old ||
+          old.lastMoveAt.microsSinceUnixEpoch !==
+            row.lastMoveAt.microsSinceUnixEpoch)
+      ) {
+        this.clock.sample(row.lastMoveAt.microsSinceUnixEpoch);
+      }
       if (!isMe) {
         avatar.setTarget(row.x, row.z, row.heading);
       } else if (!this.local) {

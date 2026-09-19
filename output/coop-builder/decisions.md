@@ -28,3 +28,8 @@
 | 2026-10-04 | — | Commit identity | Global `arinb45` / repo-local `arinb44` | Repo-local `arinb44` (`323401710+arinb44@users.noreply.github.com`); global config untouched; commands confirmed before running |
 | 2026-10-04 | — | Tool installs (M0) | Agent installs / user installs | Agent installed Node.js 24.19.0 (winget) and SpacetimeDB CLI 2.10.2 (official script) with approval |
 | 2026-10-04 | — | Git setup (D7 commands) | — | Approved and run: `git init -b main`, add `origin`, fetch, `main` tracks `origin/main` at `1c99efa` |
+| 2026-10-04 | — | Building phase length | 90 / 120 / 180 s | 120 s (recommendation); lobby auto-start 30 s, scoring 4 s, results 12 s |
+| 2026-10-04 | — | Challenge themes | Approve drafted 4 / tweak | Keep the 4 drafted co-op challenges, and add a popular-theme pick plus player ideas that others compete on |
+| 2026-10-04 | D10 | How the theme is chosen | Lobby vote / host picks / random | Live lobby vote (recommendation) |
+| 2026-10-04 | D11 | How player-idea battles are judged | Plots + everyone votes / host judges / co-op then rate | Personal plots (3×3 of 8×8) + everyone votes, not for their own plot (recommendation) |
+| 2026-10-04 | D12 | What gives way for the extra ~2 h | Trim polish / use buffer / drop phones | **Drop phone support** (user's choice; recommendation was trim polish). Requirement 10 and success criteria updated; M5 removed |
