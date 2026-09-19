@@ -17,7 +17,8 @@
     "test": "npm run test:unit && npm run test:sync",
     "test:unit": "vitest run --project unit",
     "test:sync": "vitest run --project sync",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "bots": "tsx scripts/bots.ts"
   },
   "dependencies": {
     "spacetimedb": "2.10",
