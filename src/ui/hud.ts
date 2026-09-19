@@ -1,10 +1,11 @@
-import {
-  CHALLENGES,
-  challengeById,
-} from '../../spacetimedb/src/logic/challenges';
+import { challengeById } from '../../spacetimedb/src/logic/challenges';
 import { evaluateChallenge } from '../../spacetimedb/src/logic/scoring';
 import type { DbConnection } from '../module_bindings';
 import type { ServerClock } from '../net/clock';
+import { myPlot } from '../net/queries';
+import { PlotVotePanel } from './battle';
+import { LobbyPanel } from './lobby';
+import type { Toast } from './toast';
 
 const PHASE_LABELS: Record<string, string> = {
   Lobby: 'Lobby',
@@ -20,7 +21,10 @@ function formatClock(seconds: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-/** Top-center card: phase, countdown, the challenge, and its live target checklist. */
+/**
+ * Top-center round card. Lobby: the theme ballot and idea input. Co-op: the challenge
+ * and its live checklist. Battle: your role, then the best-build vote.
+ */
 export class RoundHud {
   private readonly root = document.getElementById('round')!;
   private readonly phaseEl = document.getElementById('round-phase')!;
@@ -28,69 +32,114 @@ export class RoundHud {
   private readonly titleEl = document.getElementById('round-title')!;
   private readonly blurbEl = document.getElementById('round-blurb')!;
   private readonly targetsEl = document.getElementById('round-targets')!;
+  private readonly optionsEl = document.getElementById('round-options')!;
+  private readonly votesEl = document.getElementById('round-votes')!;
   private readonly lobbyEl = document.getElementById('round-lobby')!;
   private readonly startButton = document.getElementById(
     'start-round',
   ) as HTMLButtonElement;
+  private readonly lobby: LobbyPanel;
+  private readonly plotVotes: PlotVotePanel;
 
   constructor(
     private readonly conn: DbConnection,
     private readonly clock: ServerClock,
+    private readonly myHex: string,
+    toast: Toast,
     onStart: () => Promise<void>,
   ) {
+    this.lobby = new LobbyPanel(conn, myHex, toast);
+    this.plotVotes = new PlotVotePanel(conn, myHex, toast);
     this.startButton.addEventListener('click', async () => {
       this.startButton.disabled = true;
       try {
         await onStart();
+      } catch (err) {
+        toast.show(err instanceof Error ? err.message : String(err));
       } finally {
         this.startButton.disabled = false;
       }
     });
   }
 
-  /** Rebuilds the card from the client cache; call when game_state or pieces change. */
+  /** Rebuilds the card from the client cache; call whenever round tables change. */
   refresh(): void {
     const state = this.conn.db.gameState.id.find(0);
     if (!state) return;
     const phase = state.phase.tag;
+    const battle = state.mode.tag === 'Battle';
+    const inLobby = phase === 'Lobby';
     this.root.hidden = false;
     this.root.dataset.phase = phase;
     this.phaseEl.textContent = `Round ${state.round} · ${PHASE_LABELS[phase] ?? phase}`;
-    this.lobbyEl.hidden = phase !== 'Lobby';
 
-    const inLobby = phase === 'Lobby';
-    // In the lobby, preview the challenge that the next round will play.
-    const challenge = inLobby
-      ? challengeById(state.round % CHALLENGES.length)
-      : challengeById(state.challengeId);
-    this.titleEl.textContent = inLobby
-      ? `Next: ${challenge.title}`
-      : state.themeTitle;
+    this.lobbyEl.hidden = !inLobby;
+    this.optionsEl.hidden = !inLobby;
+    this.targetsEl.hidden = inLobby || battle;
+    this.votesEl.hidden = !(battle && phase === 'Voting');
+
+    if (inLobby) {
+      this.titleEl.textContent = 'Vote for the next round';
+      this.blurbEl.textContent =
+        'Pick a co-op challenge or a battle theme, or suggest your own idea.';
+      this.lobby.render();
+    } else if (battle) {
+      this.renderBattle(phase, state.themeTitle, state.host?.toHexString());
+    } else {
+      this.renderCoop(state.challengeId, state.themeTitle);
+    }
+    this.tick();
+  }
+
+  private renderCoop(challengeId: number, title: string): void {
+    const challenge = challengeById(challengeId);
+    this.titleEl.textContent = title;
     this.blurbEl.textContent = challenge.blurb;
-
     const evaluation = evaluateChallenge(challenge, [
       ...this.conn.db.piece.iter(),
     ]);
     this.targetsEl.replaceChildren(
       ...evaluation.targets.map((t) => {
         const li = document.createElement('li');
-        li.classList.toggle('done', t.done && !inLobby);
+        li.classList.toggle('done', t.done);
         const label = document.createElement('span');
         label.textContent = t.label;
         const count = document.createElement('span');
         count.className = 'count';
-        count.textContent = inLobby
-          ? ''
-          : t.done
-            ? '✓'
-            : `${t.value}/${t.goal}`;
+        count.textContent = t.done ? '✓' : `${t.value}/${t.goal}`;
         const bar = document.createElement('i');
-        bar.style.width = `${inLobby ? 0 : Math.round(t.completion * 100)}%`;
+        bar.style.width = `${Math.round(t.completion * 100)}%`;
         li.append(label, count, bar);
         return li;
       }),
     );
-    this.tick();
+  }
+
+  private renderBattle(
+    phase: string,
+    theme: string,
+    hostHex: string | undefined,
+  ): void {
+    const building = myPlot(this.conn, this.myHex) !== undefined;
+    if (phase === 'Voting') {
+      this.titleEl.textContent = 'Vote for the best build';
+      this.blurbEl.textContent = `Theme: ${theme}. Walk around, then pick a favourite (not your own).`;
+      this.plotVotes.render();
+      return;
+    }
+    this.titleEl.textContent = `Build Battle: ${theme}`;
+    if (phase !== 'Building') {
+      this.blurbEl.textContent = 'The votes are in!';
+    } else if (building) {
+      this.blurbEl.textContent =
+        'Build your best version inside your plot. Everyone votes after!';
+    } else if (hostHex === this.myHex) {
+      this.blurbEl.textContent =
+        'Your idea won! Watch the builders, then vote for the best one.';
+    } else {
+      this.blurbEl.textContent =
+        'You are spectating this one. Watch the builders, then vote.';
+    }
   }
 
   /** Updates the countdown; cheap enough to call every frame. */
@@ -101,15 +150,18 @@ export class RoundHud {
     const seconds = endsAt
       ? this.clock.secondsUntil(endsAt.microsSinceUnixEpoch)
       : null;
-    if (state.phase.tag === 'Lobby') {
-      this.timerEl.textContent =
-        seconds === null ? '' : `starts in ${seconds}s`;
-    } else {
-      this.timerEl.textContent = seconds === null ? '' : formatClock(seconds);
-    }
+    const text =
+      seconds === null
+        ? ''
+        : state.phase.tag === 'Lobby'
+          ? `starts in ${seconds}s`
+          : formatClock(seconds);
+    if (this.timerEl.textContent !== text) this.timerEl.textContent = text;
     this.timerEl.classList.toggle(
       'urgent',
-      state.phase.tag === 'Building' && seconds !== null && seconds <= 10,
+      (state.phase.tag === 'Building' || state.phase.tag === 'Voting') &&
+        seconds !== null &&
+        seconds <= 10,
     );
   }
 }

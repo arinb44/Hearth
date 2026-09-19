@@ -52,6 +52,10 @@ export function connect(events: ConnectionEvents): DbConnection {
           tables.player,
           tables.piece,
           tables.activity,
+          tables.idea,
+          tables.themeVote,
+          tables.plot,
+          tables.plotVote,
         ]);
     })
     .onDisconnect(() => events.onStatus('disconnected'))

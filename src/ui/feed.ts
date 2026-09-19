@@ -16,6 +16,8 @@ function describe(e: Activity): string | null {
       return `placed a ${piece}`;
     case 'removed':
       return `removed a ${piece}`;
+    case 'idea':
+      return `suggested “${e.pieceKind}”`;
     default:
       return null;
   }

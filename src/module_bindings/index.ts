@@ -44,6 +44,9 @@ import RotatePieceReducer from "./rotate_piece_reducer";
 import SetNameReducer from "./set_name_reducer";
 import SkipPhaseReducer from "./skip_phase_reducer";
 import StartRoundReducer from "./start_round_reducer";
+import SubmitIdeaReducer from "./submit_idea_reducer";
+import VotePlotReducer from "./vote_plot_reducer";
+import VoteThemeReducer from "./vote_theme_reducer";
 
 // Import all procedure arg schemas
 
@@ -51,9 +54,13 @@ import StartRoundReducer from "./start_round_reducer";
 import ActivityRow from "./activity_table";
 import ConfigRow from "./config_table";
 import GameStateRow from "./game_state_table";
+import IdeaRow from "./idea_table";
 import PieceRow from "./piece_table";
 import PlayerRow from "./player_table";
+import PlotRow from "./plot_table";
+import PlotVoteRow from "./plot_vote_table";
 import RoundResultRow from "./round_result_table";
+import ThemeVoteRow from "./theme_vote_table";
 
 /** Type-only namespace exports for generated type groups. */
 
@@ -89,6 +96,21 @@ const tablesSchema = __schema({
       { name: 'game_state_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, GameStateRow),
+  idea: __table({
+    name: 'idea',
+    indexes: [
+      { accessor: 'author', name: 'idea_author_idx_btree', algorithm: 'btree', columns: [
+        'author',
+      ] },
+      { accessor: 'id', name: 'idea_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'idea_author_key', constraint: 'unique', columns: ['author'] },
+      { name: 'idea_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, IdeaRow),
   piece: __table({
     name: 'piece',
     indexes: [
@@ -118,6 +140,32 @@ const tablesSchema = __schema({
       { name: 'player_identity_key', constraint: 'unique', columns: ['identity'] },
     ],
   }, PlayerRow),
+  plot: __table({
+    name: 'plot',
+    indexes: [
+      { accessor: 'builder', name: 'plot_builder_idx_btree', algorithm: 'btree', columns: [
+        'builder',
+      ] },
+      { accessor: 'plotIndex', name: 'plot_plot_index_idx_btree', algorithm: 'btree', columns: [
+        'plotIndex',
+      ] },
+    ],
+    constraints: [
+      { name: 'plot_builder_key', constraint: 'unique', columns: ['builder'] },
+      { name: 'plot_plot_index_key', constraint: 'unique', columns: ['plotIndex'] },
+    ],
+  }, PlotRow),
+  plotVote: __table({
+    name: 'plot_vote',
+    indexes: [
+      { accessor: 'voter', name: 'plot_vote_voter_idx_btree', algorithm: 'btree', columns: [
+        'voter',
+      ] },
+    ],
+    constraints: [
+      { name: 'plot_vote_voter_key', constraint: 'unique', columns: ['voter'] },
+    ],
+  }, PlotVoteRow),
   roundResult: __table({
     name: 'round_result',
     indexes: [
@@ -129,6 +177,17 @@ const tablesSchema = __schema({
       { name: 'round_result_round_key', constraint: 'unique', columns: ['round'] },
     ],
   }, RoundResultRow),
+  themeVote: __table({
+    name: 'theme_vote',
+    indexes: [
+      { accessor: 'voter', name: 'theme_vote_voter_idx_btree', algorithm: 'btree', columns: [
+        'voter',
+      ] },
+    ],
+    constraints: [
+      { name: 'theme_vote_voter_key', constraint: 'unique', columns: ['voter'] },
+    ],
+  }, ThemeVoteRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
@@ -143,6 +202,9 @@ const reducersSchema = __reducers(
   __reducerSchema("set_name", SetNameReducer),
   __reducerSchema("skip_phase", SkipPhaseReducer),
   __reducerSchema("start_round", StartRoundReducer),
+  __reducerSchema("submit_idea", SubmitIdeaReducer),
+  __reducerSchema("vote_plot", VotePlotReducer),
+  __reducerSchema("vote_theme", VoteThemeReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */

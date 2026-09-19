@@ -1,13 +1,28 @@
 // Round state machine. Every transition happens inside a reducer transaction, so all
 // clients see one consistent phase, theme, and countdown.
-import { ScheduleAt, Timestamp } from 'spacetimedb';
+import { ScheduleAt, Timestamp, type Identity } from 'spacetimedb';
 import { CHALLENGES, challengeById } from './logic/challenges';
 import {
   secondsToMicros,
   remainingFraction,
   type RoundTiming,
 } from './logic/phases';
+import {
+  MAX_PLOTS,
+  PLOT_ASSIGNMENT_ORDER,
+  plotCenter,
+  plotOfTile,
+  plotWinners,
+} from './logic/plots';
 import { evaluateChallenge, scoreRound, starsFor } from './logic/scoring';
+import {
+  BATTLE_THEMES,
+  optionKey,
+  parseOptionKey,
+  pickWinner,
+  presetOptionKeys,
+  tallyVotes,
+} from './logic/themes';
 import type { Ctx } from './schema';
 
 type PhaseTag = 'Lobby' | 'Building' | 'Scoring' | 'Voting' | 'Results';
@@ -87,22 +102,105 @@ export function ensureLobbyTimer(ctx: Ctx): void {
   setPhase(ctx, 'Lobby', lobbySeconds);
 }
 
-export function beginRound(ctx: Ctx): void {
+interface RoundChoice {
+  mode: 'Coop' | 'Battle';
+  challengeId: number;
+  themeTitle: string;
+  host: Identity | undefined;
+}
+
+/** Turns the lobby vote into the next round; no votes keeps the co-op rotation. */
+function chooseRound(ctx: Ctx): RoundChoice {
   const state = requireGameState(ctx);
-  // Co-op challenges rotate in order, so every round plays a different one.
-  const challenge = challengeById(state.round % CHALLENGES.length);
-  for (const p of [...ctx.db.piece.iter()]) ctx.db.piece.id.delete(p.id);
-  setPhase(ctx, 'Building', requireTiming(ctx).buildSeconds, {
-    round: state.round + 1,
-    mode: { tag: 'Coop' },
+  const ideas = [...ctx.db.idea.iter()];
+  const winner = pickWinner(
+    tallyVotes([...ctx.db.themeVote.iter()].map((v) => v.option)),
+    [...presetOptionKeys(), ...ideas.map((i) => optionKey('idea', i.id))],
+    () => ctx.random(),
+  );
+  const parsed = winner ? parseOptionKey(winner) : null;
+
+  if (parsed?.kind === 'battle') {
+    return {
+      mode: 'Battle',
+      challengeId: 0,
+      themeTitle: BATTLE_THEMES[parsed.id],
+      host: undefined,
+    };
+  }
+  if (parsed?.kind === 'idea') {
+    const chosen = ideas.find((i) => i.id === BigInt(parsed.id))!;
+    ctx.db.idea.id.delete(chosen.id); // each idea is played once
+    return {
+      mode: 'Battle',
+      challengeId: 0,
+      themeTitle: chosen.text,
+      host: chosen.author,
+    };
+  }
+  const challenge = challengeById(
+    parsed?.kind === 'challenge' ? parsed.id : state.round % CHALLENGES.length,
+  );
+  return {
+    mode: 'Coop',
     challengeId: challenge.id,
     themeTitle: challenge.title,
     host: undefined,
+  };
+}
+
+function clearRoundTables(ctx: Ctx): void {
+  for (const p of [...ctx.db.piece.iter()]) ctx.db.piece.id.delete(p.id);
+  for (const v of [...ctx.db.themeVote.iter()]) {
+    ctx.db.themeVote.voter.delete(v.voter);
+  }
+  for (const p of [...ctx.db.plot.iter()])
+    ctx.db.plot.builder.delete(p.builder);
+  for (const v of [...ctx.db.plotVote.iter()]) {
+    ctx.db.plotVote.voter.delete(v.voter);
+  }
+}
+
+/** Gives each online builder (everyone but the host, up to 9) a plot and moves them there. */
+function assignPlots(ctx: Ctx, host: Identity | undefined): void {
+  const builders = [...ctx.db.player.iter()]
+    .filter((p) => p.online && !(host && p.identity.equals(host)))
+    .slice(0, MAX_PLOTS);
+  builders.forEach((p, i) => {
+    const plotIndex = PLOT_ASSIGNMENT_ORDER[i];
+    ctx.db.plot.insert({
+      builder: p.identity,
+      plotIndex,
+      builderName: p.name,
+      colorIndex: p.colorIndex,
+    });
+    const center = plotCenter(plotIndex);
+    ctx.db.player.identity.update({
+      ...p,
+      x: center.x,
+      z: center.z,
+      moveBudget: 0,
+      lastMoveAt: ctx.timestamp,
+    });
+  });
+}
+
+export function beginRound(ctx: Ctx): void {
+  const state = requireGameState(ctx);
+  const choice = chooseRound(ctx);
+  clearRoundTables(ctx);
+  if (choice.mode === 'Battle') assignPlots(ctx, choice.host);
+  setPhase(ctx, 'Building', requireTiming(ctx).buildSeconds, {
+    round: state.round + 1,
+    mode: { tag: choice.mode },
+    challengeId: choice.challengeId,
+    themeTitle: choice.themeTitle,
+    host: choice.host,
     teamScore: 0,
   });
 }
 
-function contributions(ctx: Ctx) {
+function coopContributions(ctx: Ctx) {
   const pieces = new Map<string, number>();
   for (const p of ctx.db.piece.iter()) {
     const key = p.placedBy.toHexString();
@@ -111,21 +209,26 @@ function contributions(ctx: Ctx) {
   const rows = [];
   for (const p of ctx.db.player.iter()) {
     const count = pieces.get(p.identity.toHexString());
-    if (count)
+    if (count) {
       rows.push({
         name: p.name,
         colorIndex: p.colorIndex,
         pieces: count,
         votes: 0,
       });
+    }
   }
   return rows.sort((a, b) => b.pieces - a.pieces);
 }
 
-/** Ends the Building phase: scores the board and records the result. */
+/** Ends the Building phase: co-op rounds are scored, battle rounds move to voting. */
 function finishBuilding(ctx: Ctx): void {
   const state = requireGameState(ctx);
   const timing = requireTiming(ctx);
+  if (state.mode.tag === 'Battle') {
+    setPhase(ctx, 'Voting', timing.votingSeconds);
+    return;
+  }
   const board = [...ctx.db.piece.iter()];
   const evaluation = evaluateChallenge(challengeById(state.challengeId), board);
   const remaining = state.phaseEndsAt
@@ -144,10 +247,52 @@ function finishBuilding(ctx: Ctx): void {
     score,
     completed: evaluation.complete,
     stars: starsFor(score),
-    contributions: contributions(ctx),
+    contributions: coopContributions(ctx),
     endedAt: ctx.timestamp,
   });
   setPhase(ctx, 'Scoring', timing.scoringSeconds, { teamScore: score });
+}
+
+/** Ends the Voting phase: tallies plot votes and records the battle result. */
+function finishVoting(ctx: Ctx): void {
+  const state = requireGameState(ctx);
+  const plots = [...ctx.db.plot.iter()];
+  const tally = new Map<number, number>(plots.map((p) => [p.plotIndex, 0]));
+  for (const v of ctx.db.plotVote.iter()) {
+    const current = tally.get(v.plotIndex);
+    if (current !== undefined) tally.set(v.plotIndex, current + 1);
+  }
+  const piecesInPlot = new Map<number, number>();
+  for (const p of ctx.db.piece.iter()) {
+    const index = plotOfTile({ x: p.tileX, z: p.tileZ });
+    if (index !== null) {
+      piecesInPlot.set(index, (piecesInPlot.get(index) ?? 0) + 1);
+    }
+  }
+  const winners = plotWinners(tally);
+  const topVotes = Math.max(0, ...tally.values());
+  const contributions = plots
+    .map((p) => ({
+      name: p.builderName,
+      colorIndex: p.colorIndex,
+      pieces: piecesInPlot.get(p.plotIndex) ?? 0,
+      votes: tally.get(p.plotIndex) ?? 0,
+    }))
+    .sort((a, b) => b.votes - a.votes || b.pieces - a.pieces);
+  ctx.db.roundResult.insert({
+    round: state.round,
+    mode: state.mode,
+    themeTitle: state.themeTitle,
+    challengeId: state.challengeId,
+    score: topVotes,
+    completed: winners.length > 0,
+    stars: 0,
+    contributions,
+    endedAt: ctx.timestamp,
+  });
+  setPhase(ctx, 'Results', requireTiming(ctx).resultsSeconds, {
+    teamScore: topVotes,
+  });
 }
 
 /** Called after every board change: a co-op round ends the moment it is complete. */
@@ -160,9 +305,22 @@ export function checkEarlyCompletion(ctx: Ctx): void {
   if (evaluation.complete) finishBuilding(ctx);
 }
 
-/** Admin reset: empty board, back to an idle lobby. The round counter keeps going. */
+/** During a battle build: the player's plot, or null for host and spectators. */
+export function buildRestriction(
+  ctx: Ctx,
+  who: Identity,
+): number | null | undefined {
+  const state = requireGameState(ctx);
+  if (state.mode.tag !== 'Battle' || state.phase.tag !== 'Building') {
+    return undefined;
+  }
+  return ctx.db.plot.builder.find(who)?.plotIndex ?? null;
+}
+
+/** Admin reset: empty board, no ideas or votes, back to an idle lobby. */
 export function resetToLobby(ctx: Ctx): void {
-  for (const p of [...ctx.db.piece.iter()]) ctx.db.piece.id.delete(p.id);
+  clearRoundTables(ctx);
+  for (const i of [...ctx.db.idea.iter()]) ctx.db.idea.id.delete(i.id);
   setPhase(ctx, 'Lobby', null, { teamScore: 0, host: undefined });
   ensureLobbyTimer(ctx);
 }
@@ -180,8 +338,10 @@ export function advance(ctx: Ctx): void {
       finishBuilding(ctx);
       break;
     case 'Scoring':
-    case 'Voting':
       setPhase(ctx, 'Results', timing.resultsSeconds);
+      break;
+    case 'Voting':
+      finishVoting(ctx);
       break;
     case 'Results':
       setPhase(ctx, 'Lobby', null);

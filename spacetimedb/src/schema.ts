@@ -138,6 +138,45 @@ const activity = table(
   },
 );
 
+// Lobby: player-submitted battle ideas (one per player) and the live theme vote.
+const idea = table(
+  { name: 'idea', public: true },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    author: t.identity().unique(),
+    authorName: t.string(),
+    text: t.string(),
+    createdAt: t.timestamp(),
+  },
+);
+
+const themeVote = table(
+  { name: 'theme_vote', public: true },
+  {
+    voter: t.identity().primaryKey(),
+    option: t.string(),
+  },
+);
+
+// Build Battle: each builder's plot for the current round, and the best-build vote.
+const plot = table(
+  { name: 'plot', public: true },
+  {
+    builder: t.identity().primaryKey(),
+    plotIndex: t.u8().unique(),
+    builderName: t.string(),
+    colorIndex: t.u8(),
+  },
+);
+
+const plotVote = table(
+  { name: 'plot_vote', public: true },
+  {
+    voter: t.identity().primaryKey(),
+    plotIndex: t.u8(),
+  },
+);
+
 export const spacetimedb = schema({
   gameState,
   config,
@@ -148,6 +187,10 @@ export const spacetimedb = schema({
   session,
   piece,
   activity,
+  idea,
+  themeVote,
+  plot,
+  plotVote,
 });
 
 export type Ctx = ReducerCtx<InferSchema<typeof spacetimedb>>;

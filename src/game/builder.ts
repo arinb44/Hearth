@@ -12,7 +12,7 @@ import {
 } from '../../spacetimedb/src/logic/pieces';
 import { PointerInput } from '../input/pointer';
 import type { DbConnection } from '../module_bindings';
-import { pieceAt } from '../net/queries';
+import { buildRestriction, pieceAt } from '../net/queries';
 import { createGhostModel } from '../scene/pieceModels';
 import type { World } from '../scene/world';
 import { hotkeyFor, Palette } from '../ui/palette';
@@ -49,6 +49,7 @@ export class Builder {
     private readonly conn: DbConnection,
     private readonly toast: Toast,
     private readonly playerPos: () => Vec2 | null,
+    private readonly myHex: string,
   ) {
     const square = new THREE.BufferGeometry().setFromPoints(
       [
@@ -155,6 +156,7 @@ export class Builder {
       phase: this.phase(),
       occupied: this.isOccupied(tile),
       playerPos,
+      plot: buildRestriction(this.conn, this.myHex),
     });
   }
 
@@ -164,6 +166,7 @@ export class Builder {
       phase: this.phase(),
       occupied: this.isOccupied(tile),
       playerPos,
+      plot: buildRestriction(this.conn, this.myHex),
     });
   }
 

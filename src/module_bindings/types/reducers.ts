@@ -16,6 +16,9 @@ import RotatePieceReducer from "../rotate_piece_reducer";
 import SetNameReducer from "../set_name_reducer";
 import SkipPhaseReducer from "../skip_phase_reducer";
 import StartRoundReducer from "../start_round_reducer";
+import SubmitIdeaReducer from "../submit_idea_reducer";
+import VotePlotReducer from "../vote_plot_reducer";
+import VoteThemeReducer from "../vote_theme_reducer";
 
 export type ConfigureTimingParams = __Infer<typeof ConfigureTimingReducer>;
 export type JoinParams = __Infer<typeof JoinReducer>;
@@ -27,4 +30,7 @@ export type RotatePieceParams = __Infer<typeof RotatePieceReducer>;
 export type SetNameParams = __Infer<typeof SetNameReducer>;
 export type SkipPhaseParams = __Infer<typeof SkipPhaseReducer>;
 export type StartRoundParams = __Infer<typeof StartRoundReducer>;
+export type SubmitIdeaParams = __Infer<typeof SubmitIdeaReducer>;
+export type VotePlotParams = __Infer<typeof VotePlotReducer>;
+export type VoteThemeParams = __Infer<typeof VoteThemeReducer>;
 

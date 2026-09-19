@@ -521,3 +521,129 @@ body {
   font-weight: 400;
   opacity: 0.6;
 }
+
+.choice-list {
+  display: grid;
+  gap: 4px;
+  max-height: min(38vh, 300px);
+  overflow-y: auto;
+  margin-top: 4px;
+}
+
+.choice-list[hidden] {
+  display: none;
+}
+
+.choice-list button {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 2px 8px;
+  padding: 6px 10px;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: rgba(31, 42, 55, 0.06);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+#round-options button {
+  grid-template-columns: 1fr auto;
+}
+
+.choice-list button:hover:not(:disabled) {
+  background: rgba(31, 42, 55, 0.11);
+}
+
+.choice-list button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.choice-list button.mine {
+  border-color: #2f9e44;
+  background: #ebfbee;
+}
+
+.choice-list button.leading .title::after {
+  content: ' ★';
+  color: #f59f00;
+}
+
+.choice-list .title {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.choice-list small {
+  opacity: 0.6;
+  font-size: 11px;
+}
+
+#round-options small {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.voters {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  gap: 2px;
+}
+
+.voters .dot {
+  width: 9px;
+  height: 9px;
+}
+
+#idea-form {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+#idea-form input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 2px solid #d5e3ec;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 13px;
+}
+
+#idea-form input:focus {
+  outline: none;
+  border-color: #4dabf7;
+}
+
+#idea-form button {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 10px;
+  background: #4dabf7;
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.plot-label {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 2px solid var(--player-color, #888);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.plot-label-mine {
+  background: var(--player-color, #888);
+  color: #fff;
+}

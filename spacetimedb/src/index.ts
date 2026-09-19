@@ -12,8 +12,15 @@ import {
 } from './logic/pieces';
 import { pickColorIndex, sanitizeName } from './logic/players';
 import {
+  optionKey,
+  parseOptionKey,
+  presetOptionKeys,
+  sanitizeIdea,
+} from './logic/themes';
+import {
   advance,
   beginRound,
+  buildRestriction,
   checkEarlyCompletion,
   ensureLobbyTimer,
   isCurrentTimer,
@@ -200,6 +207,7 @@ export const placePiece = spacetimedb.reducer(
         occupied: ctx.db.piece.tileKey.find(key) !== null,
         playerPos: me,
         reachSlack: SERVER_REACH_SLACK,
+        plot: buildRestriction(ctx, ctx.sender),
       }),
     );
     ctx.db.piece.insert({
@@ -228,6 +236,7 @@ function requireModifiable(ctx: Ctx, tileX: number, tileZ: number) {
       occupied: existing !== null,
       playerPos: me,
       reachSlack: SERVER_REACH_SLACK,
+      plot: buildRestriction(ctx, ctx.sender),
     }),
   );
   return { me, existing: existing! };
@@ -301,3 +310,69 @@ export const resetGame = spacetimedb.reducer((ctx) => {
   requireAdmin(ctx);
   resetToLobby(ctx);
 });
+
+/** One build idea per player; it becomes a theme-vote option for everyone. */
+export const submitIdea = spacetimedb.reducer(
+  { text: t.string() },
+  (ctx, { text }) => {
+    const me = requirePlayer(ctx);
+    const clean = sanitizeIdea(text);
+    if (!clean) throw new SenderError('Type an idea first');
+    const previous = ctx.db.idea.author.find(ctx.sender);
+    if (previous) {
+      // Replacing an idea withdraws the old one, along with its votes.
+      ctx.db.idea.id.delete(previous.id);
+      const oldKey = optionKey('idea', previous.id);
+      for (const v of [...ctx.db.themeVote.iter()]) {
+        if (v.option === oldKey) ctx.db.themeVote.voter.delete(v.voter);
+      }
+    }
+    ctx.db.idea.insert({
+      id: 0n,
+      author: ctx.sender,
+      authorName: me.name,
+      text: clean,
+      createdAt: ctx.timestamp,
+    });
+    logActivity(ctx, me, 'idea', clean);
+  },
+);
+
+/** Lobby vote for the next round's theme; voting again changes your vote. */
+export const voteTheme = spacetimedb.reducer(
+  { option: t.string() },
+  (ctx, { option }) => {
+    requirePlayer(ctx);
+    if (requireGameState(ctx).phase.tag !== 'Lobby') {
+      throw new SenderError('Theme voting happens in the lobby');
+    }
+    const parsed = parseOptionKey(option);
+    const valid =
+      presetOptionKeys().includes(option) ||
+      (parsed?.kind === 'idea' &&
+        ctx.db.idea.id.find(BigInt(parsed.id)) !== null);
+    if (!valid) throw new SenderError('That option is not on the ballot');
+    const existing = ctx.db.themeVote.voter.find(ctx.sender);
+    if (existing) ctx.db.themeVote.voter.update({ ...existing, option });
+    else ctx.db.themeVote.insert({ voter: ctx.sender, option });
+  },
+);
+
+/** Build Battle vote for the best plot; you cannot vote for your own. */
+export const votePlot = spacetimedb.reducer(
+  { plotIndex: t.u8() },
+  (ctx, { plotIndex }) => {
+    requirePlayer(ctx);
+    if (requireGameState(ctx).phase.tag !== 'Voting') {
+      throw new SenderError('Voting is not open');
+    }
+    const target = ctx.db.plot.plotIndex.find(plotIndex);
+    if (!target) throw new SenderError('Nobody built on that plot');
+    if (target.builder.equals(ctx.sender)) {
+      throw new SenderError("You can't vote for your own build");
+    }
+    const existing = ctx.db.plotVote.voter.find(ctx.sender);
+    if (existing) ctx.db.plotVote.voter.update({ ...existing, plotIndex });
+    else ctx.db.plotVote.insert({ voter: ctx.sender, plotIndex });
+  },
+);

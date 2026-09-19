@@ -1,9 +1,10 @@
-import { PLAYER_COLORS } from '../../spacetimedb/src/logic/players';
 import type { DbConnection } from '../module_bindings';
+import type { RoundResult } from '../module_bindings/types';
+import { colorDot } from './colors';
 
 const BANNER_MS = 2500;
 
-/** The "time's up" banner and the end-of-round results card. */
+/** Phase banners and the end-of-round results card, for co-op and battle rounds. */
 export class ResultsView {
   private readonly banner = document.getElementById('banner')!;
   private readonly root = document.getElementById('results')!;
@@ -18,9 +19,12 @@ export class ResultsView {
       this.showBanner(
         result?.completed ? 'Challenge complete! 🎉' : "Time's up!",
       );
+    } else if (phase === 'Voting') {
+      this.showBanner("Time's up! Vote for the best build");
     }
-    this.root.hidden = !(phase === 'Results' && result);
-    if (phase === 'Results' && result) this.renderResult(result);
+    const show = phase === 'Results' && !!result;
+    this.root.hidden = !show;
+    if (show) this.renderResult(result);
   }
 
   private showBanner(text: string): void {
@@ -33,45 +37,50 @@ export class ResultsView {
     );
   }
 
-  private renderResult(
-    result: NonNullable<
-      ReturnType<DbConnection['db']['roundResult']['round']['find']>
-    >,
-  ): void {
-    const card = this.root.querySelector('.card')!;
+  private renderResult(result: RoundResult): void {
+    const battle = result.mode.tag === 'Battle';
     const title = document.createElement('h1');
     title.textContent = result.themeTitle;
-    const stars = document.createElement('div');
-    stars.className = 'stars';
-    stars.textContent = '★'.repeat(result.stars) + '☆'.repeat(3 - result.stars);
-    const score = document.createElement('div');
-    score.className = 'score';
-    score.textContent = `${result.score} points`;
+
+    const headline = document.createElement('div');
     const note = document.createElement('p');
-    note.textContent = result.completed
-      ? 'Every target met, with a time bonus!'
-      : 'Targets partly met. Faster teamwork next time!';
+    if (battle) {
+      const winners = result.contributions.filter(
+        (c) => c.votes > 0 && c.votes === result.score,
+      );
+      headline.className = 'score';
+      headline.textContent = winners.length
+        ? `🏆 ${winners.map((w) => w.name).join(' & ')} win${winners.length === 1 ? 's' : ''}!`
+        : 'No votes this time';
+      note.textContent = winners.length
+        ? `${result.score} vote${result.score === 1 ? '' : 's'} for the winning build.`
+        : 'Remember to vote next battle!';
+    } else {
+      const stars = document.createElement('div');
+      stars.className = 'stars';
+      stars.textContent =
+        '★'.repeat(result.stars) + '☆'.repeat(3 - result.stars);
+      headline.className = 'score';
+      headline.textContent = `${result.score} points`;
+      headline.prepend(stars);
+      note.textContent = result.completed
+        ? 'Every target met, with a time bonus!'
+        : 'Targets partly met. Faster teamwork next time!';
+    }
 
     const list = document.createElement('ul');
     list.className = 'contributions';
     for (const c of result.contributions) {
       const li = document.createElement('li');
-      const dot = document.createElement('span');
-      dot.className = 'dot';
-      dot.style.background = `#${PLAYER_COLORS[
-        c.colorIndex % PLAYER_COLORS.length
-      ]
-        .toString(16)
-        .padStart(6, '0')}`;
-      li.append(
-        dot,
-        `${c.name}`,
-        Object.assign(document.createElement('em'), {
-          textContent: `${c.pieces} piece${c.pieces === 1 ? '' : 's'}`,
-        }),
-      );
+      const detail = document.createElement('em');
+      detail.textContent = battle
+        ? `${c.votes} vote${c.votes === 1 ? '' : 's'} · ${c.pieces} pieces`
+        : `${c.pieces} piece${c.pieces === 1 ? '' : 's'}`;
+      li.append(colorDot(c.colorIndex), c.name, detail);
       list.append(li);
     }
-    card.replaceChildren(title, stars, score, note, list);
+    this.root
+      .querySelector('.card')!
+      .replaceChildren(title, headline, note, list);
   }
 }

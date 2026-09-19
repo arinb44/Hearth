@@ -61,6 +61,15 @@ export const GameState = __t.object("GameState", {
 });
 export type GameState = __Infer<typeof GameState>;
 
+export const Idea = __t.object("Idea", {
+  id: __t.u64(),
+  author: __t.identity(),
+  authorName: __t.string(),
+  text: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type Idea = __Infer<typeof Idea>;
+
 // The tagged union or sum type for the algebraic type `Mode`.
 export const Mode = __t.enum("Mode", {
   Coop: __t.unit(),
@@ -114,6 +123,20 @@ export const Player = __t.object("Player", {
 });
 export type Player = __Infer<typeof Player>;
 
+export const Plot = __t.object("Plot", {
+  builder: __t.identity(),
+  plotIndex: __t.u8(),
+  builderName: __t.string(),
+  colorIndex: __t.u8(),
+});
+export type Plot = __Infer<typeof Plot>;
+
+export const PlotVote = __t.object("PlotVote", {
+  voter: __t.identity(),
+  plotIndex: __t.u8(),
+});
+export type PlotVote = __Infer<typeof PlotVote>;
+
 export const RoundResult = __t.object("RoundResult", {
   round: __t.u32(),
   get mode() {
@@ -136,4 +159,10 @@ export const Session = __t.object("Session", {
   identity: __t.identity(),
 });
 export type Session = __Infer<typeof Session>;
+
+export const ThemeVote = __t.object("ThemeVote", {
+  voter: __t.identity(),
+  option: __t.string(),
+});
+export type ThemeVote = __Infer<typeof ThemeVote>;
 

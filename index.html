@@ -22,7 +22,17 @@
         <h2 id="round-title"></h2>
         <p id="round-blurb"></p>
         <ul id="round-targets"></ul>
+        <div id="round-options" class="choice-list" hidden></div>
+        <div id="round-votes" class="choice-list" hidden></div>
         <div id="round-lobby" hidden>
+          <form id="idea-form">
+            <input
+              name="idea"
+              placeholder="Suggest a build idea…"
+              autocomplete="off"
+            />
+            <button type="submit">Suggest</button>
+          </form>
           <button id="start-round" type="button">Start round</button>
         </div>
       </section>
