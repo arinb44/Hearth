@@ -5,6 +5,7 @@ import {
   BUILD_ERROR_MESSAGES,
   BUILD_REACH,
   checkModify,
+  canBuildInPhase,
   checkPlacement,
   PIECE_KINDS,
   type BuildError,
@@ -33,6 +34,8 @@ export class Builder {
   private selected: PieceKind = 'house';
   private rotation = 0;
   private enabled = false;
+  private canBuildShown = true;
+  private readonly hint = document.getElementById('hint')!;
   private ghost: THREE.Group | null = null;
   private readonly ghostMaterial = new THREE.MeshBasicMaterial({
     transparent: true,
@@ -103,6 +106,22 @@ export class Builder {
 
   update(): void {
     if (!this.enabled) return;
+    // Hide the palette whenever building is impossible: between rounds' build phases,
+    // or for battle hosts and spectators.
+    const canBuild =
+      canBuildInPhase(this.phase()) &&
+      buildRestriction(this.conn, this.myHex) !== null;
+    if (canBuild !== this.canBuildShown) {
+      this.canBuildShown = canBuild;
+      this.palette.setVisible(canBuild);
+      this.hint.hidden = !canBuild;
+    }
+    if (!canBuild) {
+      this.outline.visible = false;
+      this.reachRing.visible = false;
+      if (this.ghost) this.ghost.visible = false;
+      return;
+    }
     const pos = this.playerPos();
     const tile = this.pointer.tile();
     this.reachRing.visible = pos !== null;

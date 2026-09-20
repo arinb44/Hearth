@@ -18,7 +18,7 @@ Build a good-looking multiplayer co-op building game that meets the "Best use of
 
   Every countdown runs on the server.
 - **Low-poly 3D world:** a tile terrain where players place and remove prefab pieces (trees, houses, rocks, paths, etc.), with walking low-poly avatars that show name tags.
-- **Easy to join:** players open a public URL on laptops (mouse and keyboard). The module is hosted on the Maincloud free tier. *(Phone support was dropped on 2026-10-04 to make room for Build Battle.)*
+- **Easy to join:** players open a public URL on laptops (mouse and keyboard) or phones (touch). The module is hosted on the Maincloud free tier. *(Phone support was dropped and then restored on 2026-10-04.)*
 
 ## Specialization
 *From: "What do I specialize in?"*
@@ -26,7 +26,7 @@ Build a good-looking multiplayer co-op building game that meets the "Best use of
 - **Languages:** TypeScript, for both the server module and the client. The user first chose C++ for the module, then switched to TypeScript to reduce toolchain risk.
 - **Frameworks / libraries:** SpacetimeDB 2.x (TypeScript server module and TypeScript client SDK) and Three.js. Build tooling and any UI framework are chosen in the plan with the user's approval.
 - **Area of expertise:** real-time multiplayer game development, server-authoritative shared state, 3D web rendering.
-- **Target platform:** desktop web browsers. Backend on SpacetimeDB Maincloud (free tier); local `spacetime start` for development and tests.
+- **Target platform:** web browsers on desktop and mobile. Backend on SpacetimeDB Maincloud (free tier); local `spacetime start` for development and tests.
 
 ## Focus
 *From: "What should I focus on?"*
@@ -52,7 +52,7 @@ Build a good-looking multiplayer co-op building game that meets the "Best use of
 - **Compatibility:**
   - Windows 11 dev machine; only `git` and `winget` are installed at the start.
   - SpacetimeDB 2.x.
-  - Current desktop Chrome, Edge and Safari (phones out of scope).
+  - Current desktop Chrome, Edge and Safari, plus mobile browsers (iOS Safari, Android Chrome).
 - **Other:**
   - About 12 hours in total, solo.
   - Must run smoothly with 10 concurrent players.
@@ -90,7 +90,7 @@ Build a good-looking multiplayer co-op building game that meets the "Best use of
 
 ## Success Criteria
 The work is done when:
-- Up to 10 players on laptops can open the public URL, see each other's avatars move live, and build together in the same world, with the module hosted on the Maincloud free tier.
+- Up to 10 players on laptops and phones can open the public URL, see each other's avatars move live, and build together in the same world, with the module hosted on the Maincloud free tier.
 - A full co-op round (start → countdown → scoring → results) and a full Build Battle round (theme vote → building in plots → voting → results) run from start to finish with all clients in sync.
 - All shared game state lives in SpacetimeDB and changes only through reducers. A client that disconnects and reconnects sees the correct current state.
 - The multi-client sync test passes, showing that clients acting at the same time converge on the same state.

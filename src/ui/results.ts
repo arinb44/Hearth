@@ -3,6 +3,15 @@ import type { RoundResult } from '../module_bindings/types';
 import { colorDot } from './colors';
 
 const BANNER_MS = 2500;
+const CONFETTI_PIECES = 70;
+const CONFETTI_COLORS = [
+  '#ff6b6b',
+  '#ffd43b',
+  '#69db7c',
+  '#4dabf7',
+  '#b197fc',
+  '#ff922b',
+];
 
 /** Phase banners and the end-of-round results card, for co-op and battle rounds. */
 export class ResultsView {
@@ -82,5 +91,20 @@ export class ResultsView {
     this.root
       .querySelector('.card')!
       .replaceChildren(title, headline, note, list);
+    const celebrate = battle ? result.score > 0 : result.completed;
+    this.root
+      .querySelector('.confetti')!
+      .replaceChildren(...(celebrate ? confetti() : []));
   }
+}
+
+function confetti(): HTMLElement[] {
+  return Array.from({ length: CONFETTI_PIECES }, (_, i) => {
+    const piece = document.createElement('i');
+    piece.style.left = `${Math.random() * 100}%`;
+    piece.style.background = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
+    piece.style.animationDelay = `${Math.random() * 0.8}s`;
+    piece.style.animationDuration = `${2 + Math.random() * 1.5}s`;
+    return piece;
+  });
 }

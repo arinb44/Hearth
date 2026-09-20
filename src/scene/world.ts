@@ -15,13 +15,45 @@ const OVERVIEW_POSITION = new THREE.Vector3(22, 26, 28);
 const FOLLOW_OFFSET = new THREE.Vector3(0, 11, 11);
 const CAMERA_SMOOTHING = 5;
 
+/** Island grass; loaded models' grass is tinted to match so tiles blend in. */
+export const GRASS_COLOR = '#86c96b';
+/** Half-width of the sandy beach around the grid; decorations live out here. */
+export const BEACH_HALF = (GRID_SIZE * TILE_SIZE) / 2 + 3;
+
 const COLORS = {
-  sky: '#bfe6f5',
-  grass: '#86c96b',
+  skyTop: '#6fc3ef',
+  horizon: '#dff3fb',
+  grass: GRASS_COLOR,
   sand: '#f1d9a6',
   cliff: '#a9825a',
   water: '#4fc0dd',
+  cloud: '#ffffff',
 };
+
+function createSky(): THREE.Mesh {
+  const material = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    depthWrite: false,
+    uniforms: {
+      top: { value: new THREE.Color(COLORS.skyTop) },
+      horizon: { value: new THREE.Color(COLORS.horizon) },
+    },
+    vertexShader: /* glsl */ `
+      varying float vHeight;
+      void main() {
+        vHeight = normalize(position).y;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: /* glsl */ `
+      uniform vec3 top;
+      uniform vec3 horizon;
+      varying float vHeight;
+      void main() {
+        gl_FragColor = vec4(mix(horizon, top, smoothstep(0.0, 0.55, vHeight)), 1.0);
+      }`,
+  });
+  return new THREE.Mesh(new THREE.SphereGeometry(300, 24, 12), material);
+}
 
 function createIsland(): THREE.Group {
   const island = new THREE.Group();
@@ -36,7 +68,7 @@ function createIsland(): THREE.Group {
   island.add(grass);
 
   const sand = new THREE.Mesh(
-    new THREE.BoxGeometry(size + 2, 0.5, size + 2),
+    new THREE.BoxGeometry(BEACH_HALF * 2, 0.5, BEACH_HALF * 2),
     new THREE.MeshStandardMaterial({ color: COLORS.sand, flatShading: true }),
   );
   sand.position.y = -0.55;
@@ -44,10 +76,11 @@ function createIsland(): THREE.Group {
   island.add(sand);
 
   const cliff = new THREE.Mesh(
-    new THREE.CylinderGeometry(size * 0.62, size * 0.5, 3, 7),
+    new THREE.CylinderGeometry(BEACH_HALF * 1.2, BEACH_HALF * 0.9, 3, 8),
     new THREE.MeshStandardMaterial({ color: COLORS.cliff, flatShading: true }),
   );
   cliff.position.y = -2.3;
+  cliff.rotation.y = Math.PI / 8;
   island.add(cliff);
 
   const grid = new THREE.GridHelper(size, GRID_SIZE, '#ffffff', '#ffffff');
@@ -60,19 +93,78 @@ function createIsland(): THREE.Group {
   return island;
 }
 
-function createWater(): THREE.Mesh {
-  const water = new THREE.Mesh(
-    new THREE.PlaneGeometry(400, 400),
+/** A gently rolling sea: vertex heights are recomputed each frame from two waves. */
+function createWater(): { mesh: THREE.Mesh; animate(time: number): void } {
+  const geometry = new THREE.PlaneGeometry(160, 160, 48, 48);
+  const mesh = new THREE.Mesh(
+    geometry,
     new THREE.MeshStandardMaterial({
       color: COLORS.water,
       transparent: true,
-      opacity: 0.92,
-      roughness: 0.35,
+      opacity: 0.9,
+      roughness: 0.3,
+      flatShading: true,
     }),
   );
-  water.rotation.x = -Math.PI / 2;
-  water.position.y = -0.7;
-  return water;
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.y = -0.75;
+  const position = geometry.attributes.position as THREE.BufferAttribute;
+  return {
+    mesh,
+    animate(time) {
+      for (let i = 0; i < position.count; i++) {
+        const x = position.getX(i);
+        const y = position.getY(i);
+        position.setZ(
+          i,
+          Math.sin(x * 0.18 + time * 0.9) * 0.12 +
+            Math.cos(y * 0.23 + time * 0.7) * 0.1,
+        );
+      }
+      position.needsUpdate = true;
+      geometry.computeVertexNormals();
+    },
+  };
+}
+
+/** A few puffy low-poly clouds drifting across the sky and wrapping around. */
+function createClouds(): { group: THREE.Group; animate(dt: number): void } {
+  const group = new THREE.Group();
+  const material = new THREE.MeshStandardMaterial({
+    color: COLORS.cloud,
+    flatShading: true,
+    transparent: true,
+    opacity: 0.92,
+  });
+  const puff = new THREE.IcosahedronGeometry(1, 0);
+  const layout: [number, number, number][] = [
+    [-30, 15, -20],
+    [5, 17, -32],
+    [28, 14, -12],
+    [-12, 16, 18],
+    [22, 18, 22],
+    [-36, 17, 8],
+  ];
+  for (const [x, y, z] of layout) {
+    const cloud = new THREE.Group();
+    for (let i = 0; i < 4; i++) {
+      const p = new THREE.Mesh(puff, material);
+      p.position.set(i * 1.4 - 2, Math.sin(i * 1.7) * 0.4, (i % 2) * 0.8);
+      p.scale.setScalar(1.3 + ((i * 7) % 3) * 0.35);
+      cloud.add(p);
+    }
+    cloud.position.set(x, y, z);
+    group.add(cloud);
+  }
+  return {
+    group,
+    animate(dt) {
+      for (const cloud of group.children) {
+        cloud.position.x += dt * 0.6;
+        if (cloud.position.x > 45) cloud.position.x = -45;
+      }
+    },
+  };
 }
 
 function addLights(scene: THREE.Scene): void {
@@ -82,14 +174,14 @@ function addLights(scene: THREE.Scene): void {
   sun.position.set(14, 22, 9);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
-  const extent = GRID_SIZE * 0.75;
+  const extent = BEACH_HALF + 2;
   Object.assign(sun.shadow.camera, {
     left: -extent,
     right: extent,
     top: extent,
     bottom: -extent,
     near: 1,
-    far: 60,
+    far: 70,
   });
   scene.add(sun);
 }
@@ -103,10 +195,9 @@ export function createWorld(container: HTMLElement): World {
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(COLORS.sky);
-  scene.fog = new THREE.Fog(COLORS.sky, 45, 120);
+  scene.fog = new THREE.Fog(COLORS.horizon, 50, 140);
 
-  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 500);
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 600);
   camera.position.copy(OVERVIEW_POSITION);
   const lookAt = new THREE.Vector3();
   camera.lookAt(lookAt);
@@ -116,7 +207,10 @@ export function createWorld(container: HTMLElement): World {
   labels.domElement.classList.add('labels');
   container.appendChild(labels.domElement);
 
-  scene.add(createIsland(), createWater());
+  const water = createWater();
+  const clouds = createClouds();
+  const sky = createSky();
+  scene.add(sky, createIsland(), water.mesh, clouds.group);
   addLights(scene);
 
   const resize = () => {
@@ -153,7 +247,11 @@ export function createWorld(container: HTMLElement): World {
     start(onFrame) {
       renderer.setAnimationLoop((timestamp) => {
         timer.update(timestamp);
-        onFrame(Math.min(timer.getDelta(), 0.1));
+        const dt = Math.min(timer.getDelta(), 0.1);
+        water.animate(timer.getElapsed());
+        clouds.animate(dt);
+        sky.position.copy(camera.position);
+        onFrame(dt);
         renderer.render(scene, camera);
         labels.render(scene, camera);
       });

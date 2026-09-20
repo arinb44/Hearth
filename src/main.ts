@@ -1,7 +1,20 @@
 import './ui/styles.css';
 import { Game } from './game/game';
 import { connect, type ConnectionStatus } from './net/connection';
+import { loadPieceModels } from './scene/modelLibrary';
+import { installModelLibrary } from './scene/pieceModels';
 import { createWorld } from './scene/world';
+
+const MODEL_TIMEOUT_MS = 8000;
+
+// Real models load in parallel with the connection; on failure or a slow network the
+// procedural models are used instead, so the game always starts.
+const modelsReady = Promise.race([
+  loadPieceModels().then(installModelLibrary),
+  new Promise<void>((_, reject) =>
+    setTimeout(() => reject(new Error('timed out')), MODEL_TIMEOUT_MS),
+  ),
+]).catch((err: unknown) => console.warn('Using built-in piece models:', err));
 
 const statusEl = document.getElementById('status')!;
 
@@ -28,6 +41,8 @@ connect({
     setStatus(status, labels[status]);
   },
   onReady(conn, identity) {
-    game = new Game(world, conn, identity);
+    void modelsReady.then(() => {
+      game = new Game(world, conn, identity);
+    });
   },
 });

@@ -212,11 +212,17 @@ body {
   opacity: 0.55;
 }
 
+/* Bottom-right, newest at the bottom, clear of the round card and the screen center. */
 #feed {
-  margin: 10px 0 0;
+  position: absolute;
+  right: 16px;
+  align-items: flex-end;
+  bottom: 110px;
+  margin: 0;
   padding: 0;
   list-style: none;
-  display: grid;
+  display: flex;
+  flex-direction: column-reverse;
   gap: 6px;
   max-width: min(320px, 60vw);
 }
@@ -336,12 +342,14 @@ body {
   transform: translate(-50%, 0);
 }
 
+/* Left column under the status pill, so the avatar at the screen center stays visible. */
 #round {
   position: absolute;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(340px, calc(100vw - 32px));
+  top: 60px;
+  left: 16px;
+  width: min(300px, calc(100vw - 32px));
+  max-height: calc(100vh - 190px);
+  overflow-y: auto;
   padding: 12px 16px 14px;
   border-radius: 18px;
   background: var(--panel);
@@ -522,11 +530,10 @@ body {
   opacity: 0.6;
 }
 
+/* The round card scrolls as a whole, so lists never get a second scrollbar. */
 .choice-list {
   display: grid;
-  gap: 4px;
-  max-height: min(38vh, 300px);
-  overflow-y: auto;
+  gap: 3px;
   margin-top: 4px;
 }
 
@@ -538,8 +545,8 @@ body {
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: 2px 8px;
-  padding: 6px 10px;
+  gap: 0 8px;
+  padding: 4px 10px;
   border: 2px solid transparent;
   border-radius: 10px;
   background: rgba(31, 42, 55, 0.06);
@@ -646,4 +653,30 @@ body {
 .plot-label-mine {
   background: var(--player-color, #888);
   color: #fff;
+}
+
+.confetti {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.confetti i {
+  position: absolute;
+  top: -12px;
+  width: 9px;
+  height: 14px;
+  border-radius: 2px;
+  animation: confetti-fall linear forwards;
+}
+
+@keyframes confetti-fall {
+  to {
+    transform: translateY(105vh) rotate(720deg);
+  }
+}
+
+#hint[hidden] {
+  display: none;
 }

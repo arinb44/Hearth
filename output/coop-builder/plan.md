@@ -29,7 +29,7 @@ The module is hosted on the Maincloud free tier, and the static web client is ho
    - The results screen shows the score and what each player contributed.
 8. **Activity feed.** Feed entries and placement effects ("Sam placed a House") come from an event table (new in 2.0), not from client-side guesses.
 9. **10 players.** 10 concurrent players on Maincloud with no visible lag. Verified with a 10-bot script plus real devices.
-10. **Laptops.** WASD to move, mouse to place and remove, keys to rotate and select pieces. Must work in current desktop Chrome, Edge and Safari. *(Phone support was dropped on 2026-10-04 to make room for Build Battle.)*
+10. **Laptops and phones.** On laptops: WASD to move, mouse to place and remove, keys to rotate and select pieces. On phones: a touch joystick, tap to place, and a piece palette. Must work in current Chrome, Edge and Safari, including iOS Safari and Android Chrome. *(Dropped on 2026-10-04 for Build Battle, then restored the same day because the schedule was well ahead.)*
 11. **Reconnecting.** A client that drops and reconnects sees the correct current state and keeps its identity.
 12. **Hosting.** The module runs on the Maincloud free tier and the client is reachable at a public URL. No paid services.
 13. **Look and feel.** A consistent low-poly look: one palette, sky and lighting, soft shadows, simple animations.
@@ -54,7 +54,6 @@ The module is hosted on the Maincloud free tier, and the static web client is ho
 - Publishing to Maincloud and to a free static host.
 
 **Out of scope**
-- Phone and touch support (dropped 2026-10-04).
 - Moderation of player-submitted ideas beyond cleanup and the length limit.
 - Paid services, accounts with passwords (SpacetimeDB's anonymous identity plus a nickname is used instead), and chat.
 - Multiple simultaneous lobbies or rooms, matchmaking, and saving worlds between rounds (unless decision D4 chooses that).
@@ -185,7 +184,7 @@ Time estimates total about 11.5 hours with a small buffer. **Cut line:** M0–M4
 | **M3b** | **Theme vote + Build Battle:** `idea`/`theme_vote` tables and lobby vote UI; battle mode with `plot` assignment, plot-only building, plot labels, `Voting` phase with `plot_vote`, winners in `round_result` | Unit tests (plots, tally, battle rules) and sync tests 6–7 pass | 2 h |
 | **M4** | **Deploy:** environment config, publish to Maincloud (after your `spacetime login`), frontend on the free host (D6), README; 10-bot run against Maincloud | Public URL plays end to end; bots run without errors | 1 h |
 | — | *Cut line: demoable game with both modes* | | |
-| ~~M5~~ | ~~Phones~~: removed 2026-10-04 (phone support dropped) | — | — |
+| **M5** | **Phones (restored 2026-10-04):** touch joystick, tap to place, responsive HUD, quality toggle | Tested on a phone-sized viewport and a laptop together | 1.25 h |
 | **M6** | **Visual polish:** final low-poly assets (D5), lighting, water, particles, avatar walk cycle, results celebration | Looks consistent on laptops | 1.5 h |
 | **M7** | **Demo hardening:** reconnect UX, cleanup of idle and offline players, host-only reset / skip-phase reducer, full rehearsal (10 bots + devices), demo script in the README | All tests pass; rehearsal checklist done | 0.75 h |
 
@@ -207,7 +206,7 @@ I'll ask about these with options and a recommendation. D1, D2, D5, D6 and D7 sh
 | D9 | Commit the `output/coop-builder/` docs to the repo? | Commit them / keep them local (add to `.gitignore`) |
 | D10 | How the theme is chosen | **Live lobby vote** (chosen) / host picks / random |
 | D11 | How player-idea battles are judged | **Personal plots + everyone votes** (chosen) / host judges / co-op build then rate |
-| D12 | What gives way for the extra ~2 h | **Drop phone support** (chosen) / trim polish / use buffer |
+| D12 | What gives way for the extra ~2 h | **Drop phone support** (chosen; reversed later the same day because the schedule was ahead) / trim polish / use buffer |
 
 ## Risks & Limitations
 - **SpacetimeDB 2.0 is new.** TypeScript modules and event tables are recent features, so details in the docs may not match the installed version. *Mitigation:* scaffold from the official template, build against the generated bindings, and check behavior in M0–M1 before building on it.
@@ -229,4 +228,4 @@ I'll ask about these with options and a recommendation. D1, D2, D5, D6 and D7 sh
 4. Any **challenge themes** you want, e.g. "Cozy Village", "Lighthouse Harbor", "Forest Camp"? Otherwise I'll draft 3–4 for you to approve in M3.
 
 ---
-**Status:** Revision 1 approved on 2026-10-04 (D1–D8 per recommendations). **Revision 2 approved on 2026-10-04.** It adds a lobby theme vote, player ideas and Build Battle (requirements 16–17, M3b; D10–D11), and drops phone support (requirement 10, M5 removed; D12).
+**Status:** Revision 1 approved on 2026-10-04 (D1–D8 per recommendations). **Revision 2 approved on 2026-10-04.** **Revision 3 (2026-10-04, chosen by the user):** phone support restored (requirement 10, M5 back after M6); M6 uses Kenney CC0 packs (D5). It adds a lobby theme vote, player ideas and Build Battle (requirements 16–17, M3b; D10–D11), and drops phone support (requirement 10, M5 removed; D12).

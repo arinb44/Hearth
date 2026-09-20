@@ -150,6 +150,16 @@ const builders: Record<PieceKind, () => THREE.Object3D[]> = {
 /** Shared geometry per kind: built once, cloned (sharing buffers) per placed piece. */
 const prototypes = new Map<PieceKind, THREE.Group>();
 
+/**
+ * Replaces the procedural fallbacks with loaded models (see modelLibrary.ts). Call
+ * before any piece is created so every client renders the same models.
+ */
+export function installModelLibrary(
+  library: Map<PieceKind, THREE.Group>,
+): void {
+  for (const [kind, model] of library) prototypes.set(kind, model);
+}
+
 export function createPieceModel(kind: PieceKind): THREE.Group {
   let proto = prototypes.get(kind);
   if (!proto) {

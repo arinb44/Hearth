@@ -101,4 +101,8 @@ spacetime call coop-builder-mhacks configure_timing 30 120 4 25 12
 
 ## Credits
 
-All 3D models are generated in code (Three.js primitives). No external assets.
+- 3D models: [Kenney](https://www.kenney.nl) — Nature Kit 2.1 and Fantasy Town Kit 2.0,
+  CC0 (public domain). The license files are in `public/assets/models/*/License.txt`.
+  Houses and towers are assembled in code from the kit's wall and roof pieces.
+- Everything else (avatars, sky, water, effects) is generated in code with Three.js.
+- If the models can't load, the game falls back to built-in procedural models.

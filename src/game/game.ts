@@ -6,6 +6,7 @@ import type { DbConnection } from '../module_bindings';
 import type { Player } from '../module_bindings/types';
 import { Avatar } from '../scene/avatars';
 import { PieceLayer } from '../scene/pieces';
+import { decorateBeach, Effects } from '../scene/effects';
 import { PlotLayer } from '../scene/plots';
 import type { World } from '../scene/world';
 import { ServerClock } from '../net/clock';
@@ -13,7 +14,9 @@ import { ActivityFeed } from '../ui/feed';
 import { RoundHud } from '../ui/hud';
 import { JoinScreen } from '../ui/join';
 import { PlayerList } from '../ui/players';
+import { playerCss } from '../ui/colors';
 import { ResultsView } from '../ui/results';
+import { tileToWorld } from '../../spacetimedb/src/logic/grid';
 import { Toast } from '../ui/toast';
 import { Builder } from './builder';
 import { LocalPlayer } from './localPlayer';
@@ -36,6 +39,7 @@ export class Game {
   private readonly results: ResultsView;
   private readonly plots: PlotLayer;
   private readonly toast = new Toast();
+  private readonly effects: Effects;
   private readonly myHex: string;
   private readonly followTarget = new THREE.Vector3();
   private local: LocalPlayer | null = null;
@@ -51,6 +55,8 @@ export class Game {
     });
     this.pieces = new PieceLayer(world.scene);
     this.plots = new PlotLayer(world.scene);
+    this.effects = new Effects(world.scene);
+    decorateBeach(world.scene);
     this.builder = new Builder(
       world,
       conn,
@@ -104,7 +110,16 @@ export class Game {
     this.refreshRound();
     const initial = conn.db.gameState.id.find(0);
     if (initial) this.results.onPhase(initial.phase.tag, initial.round);
-    conn.db.activity.onInsert((_ctx, event) => this.feed.add(event));
+    conn.db.activity.onInsert((_ctx, event) => {
+      this.feed.add(event);
+      if (event.kind === 'placed' || event.kind === 'removed') {
+        this.effects.puff(
+          tileToWorld(event.tileX),
+          tileToWorld(event.tileZ),
+          playerCss(event.colorIndex),
+        );
+      }
+    });
 
     conn.db.player.onInsert((_ctx, row) => this.onPlayer(row));
     conn.db.player.onUpdate((_ctx, old, row) => this.onPlayer(row, old));
@@ -128,6 +143,7 @@ export class Game {
     }
     for (const avatar of this.avatars.values()) avatar.update(dt);
     this.pieces.update(dt);
+    this.effects.update(dt);
     this.builder.update();
     this.hud.tick();
 

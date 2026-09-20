@@ -33,3 +33,7 @@
 | 2026-10-04 | D10 | How the theme is chosen | Lobby vote / host picks / random | Live lobby vote (recommendation) |
 | 2026-10-04 | D11 | How player-idea battles are judged | Plots + everyone votes / host judges / co-op then rate | Personal plots (3×3 of 8×8) + everyone votes, not for their own plot (recommendation) |
 | 2026-10-04 | D12 | What gives way for the extra ~2 h | Trim polish / use buffer / drop phones | **Drop phone support** (user's choice; recommendation was trim polish). Requirement 10 and success criteria updated; M5 removed |
+| 2026-10-04 | — | Publish to Maincloud | Publish / hold | Published as `coop-builder-mhacks` after the user's `spacetime login` |
+| 2026-10-04 | — | Local DBs owned by the lost local identity | Wipe local data / new local DB names | Wipe local server data (recommendation); dev + test DBs recreated |
+| 2026-10-04 | D5 | 3D assets for M6 | Kenney CC0 packs / refine procedural | Kenney CC0 packs (recommendation); downloads approved individually |
+| 2026-10-04 | — | Restore phone support (we were ahead of schedule) | Restore M5 / laptops only | Restore phones: M5 back after M6; requirement 10 and success criteria reinstated |
