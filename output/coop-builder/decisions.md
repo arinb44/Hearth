@@ -39,3 +39,4 @@
 | 2026-10-04 | — | Restore phone support (we were ahead of schedule) | Restore M5 / laptops only | Restore phones: M5 back after M6; requirement 10 and success criteria reinstated |
 | 2026-10-04 | — | Phone orientation | Portrait / landscape | **Landscape** (user request). Portrait shows a rotate card; Android tries fullscreen + orientation lock (iOS cannot lock) |
 | 2026-10-04 | — | Compact UI: collapse the assets | (user request) | Collapsible piece palette: the toggle shows the current piece; starts collapsed on compact layouts and re-collapses after a pick; expanded by default on large desktops; Turn/Remove stay visible |
+| 2026-10-04 | — | Fences do not join at intersections; paths should connect | (user request) | Connection-aware rendering (client only): each fence/path tile draws arms toward same-kind neighbours (post + rails / dirt patch), reusing the Kenney wood and dirt materials; lone pieces keep their rotation |

@@ -2,6 +2,7 @@ import './ui/styles.css';
 import { Game } from './game/game';
 import { IS_TOUCH } from './input/touch';
 import { connect, type ConnectionStatus } from './net/connection';
+import { resetReconnectBackoff, scheduleReconnect } from './net/reconnect';
 import { loadPieceModels } from './scene/modelLibrary';
 import { installModelLibrary } from './scene/pieceModels';
 import { setUpLandscape } from './ui/orientation';
@@ -38,6 +39,8 @@ world.start((dt) => {
   else world.follow(null, dt);
 });
 
+let reconnecting = false;
+
 connect({
   onStatus(status, detail) {
     const labels = {
@@ -47,6 +50,13 @@ connect({
       error: `Connection error${detail ? `: ${detail}` : ''}`,
     };
     setStatus(status, labels[status]);
+    if (status === 'connected') resetReconnectBackoff();
+    if ((status === 'disconnected' || status === 'error') && !reconnecting) {
+      reconnecting = true;
+      scheduleReconnect((seconds) =>
+        setStatus(status, `Reconnecting in ${seconds}s…`),
+      );
+    }
   },
   onReady(conn, identity) {
     void modelsReady.then(() => {

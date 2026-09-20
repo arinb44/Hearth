@@ -197,7 +197,7 @@ export function createWorld(container: HTMLElement): World {
     Math.min(window.devicePixelRatio, LOW_POWER ? 1.5 : 2),
   );
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   container.appendChild(renderer.domElement);
 

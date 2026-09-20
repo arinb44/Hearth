@@ -1,5 +1,11 @@
 import * as THREE from 'three';
 import type { PieceKind } from '../../spacetimedb/src/logic/pieces';
+import {
+  createConnectedModel,
+  installConnectorMaterials,
+  isConnective,
+} from './connectedModels';
+import type { ModelLibrary } from './modelLibrary';
 
 // Procedural low-poly models, one per piece kind, each fitting a 1×1 tile with its
 // origin at the tile center on the ground. Materials are shared across instances.
@@ -154,13 +160,14 @@ const prototypes = new Map<PieceKind, THREE.Group>();
  * Replaces the procedural fallbacks with loaded models (see modelLibrary.ts). Call
  * before any piece is created so every client renders the same models.
  */
-export function installModelLibrary(
-  library: Map<PieceKind, THREE.Group>,
-): void {
-  for (const [kind, model] of library) prototypes.set(kind, model);
+export function installModelLibrary(library: ModelLibrary): void {
+  for (const [kind, model] of library.models) prototypes.set(kind, model);
+  installConnectorMaterials(library.materials);
 }
 
 export function createPieceModel(kind: PieceKind): THREE.Group {
+  // Fences and paths depend on their neighbours; this is the stand-alone look.
+  if (isConnective(kind)) return createConnectedModel(kind, 0, 0);
   let proto = prototypes.get(kind);
   if (!proto) {
     proto = new THREE.Group();

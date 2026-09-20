@@ -126,8 +126,32 @@ const ASSEMBLE: Record<PieceKind, (p: Parts) => THREE.Group> = {
   lamp: (p) => fit(p.lantern.clone(), 0.9, 1.2),
 };
 
+export interface ModelLibrary {
+  models: Map<PieceKind, THREE.Group>;
+  /** Kit materials by name (wood, woodDark, dirt, dirtDark) for the connected pieces. */
+  materials: Map<string, THREE.Material>;
+}
+
+function collectMaterials(
+  ...objects: THREE.Object3D[]
+): Map<string, THREE.Material> {
+  const materials = new Map<string, THREE.Material>();
+  for (const object of objects) {
+    object.traverse((o) => {
+      if (
+        o instanceof THREE.Mesh &&
+        !Array.isArray(o.material) &&
+        o.material.name
+      ) {
+        materials.set(o.material.name, o.material);
+      }
+    });
+  }
+  return materials;
+}
+
 /** Loads and assembles one prototype per piece kind. Rejects if any file fails. */
-export async function loadPieceModels(): Promise<Map<PieceKind, THREE.Group>> {
+export async function loadPieceModels(): Promise<ModelLibrary> {
   const loader = new GLTFLoader();
   const entries = await Promise.all(
     Object.entries(FILES).map(async ([key, file]) => {
@@ -164,5 +188,8 @@ export async function loadPieceModels(): Promise<Map<PieceKind, THREE.Group>> {
     });
     library.set(kind, model);
   }
-  return library;
+  return {
+    models: library,
+    materials: collectMaterials(parts.fence, parts.path),
+  };
 }
