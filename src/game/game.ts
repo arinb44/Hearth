@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Identity } from 'spacetimedb';
 import { PLAYER_COLORS } from '../../spacetimedb/src/logic/players';
 import { KeyboardMovement } from '../input/desktop';
+import { TouchJoystick } from '../input/touch';
 import type { DbConnection } from '../module_bindings';
 import type { Player } from '../module_bindings/types';
 import { Avatar } from '../scene/avatars';
@@ -29,6 +30,7 @@ function colorOf(p: Player): number {
 export class Game {
   private readonly avatars = new Map<string, Avatar>();
   private readonly keyboard = new KeyboardMovement();
+  private readonly joystick = new TouchJoystick();
   private readonly playerList = new PlayerList();
   private readonly joinScreen: JoinScreen;
   private readonly pieces: PieceLayer;
@@ -136,7 +138,10 @@ export class Game {
 
   update(dt: number): void {
     if (this.local) {
-      this.local.update(dt, this.keyboard.direction(), performance.now());
+      const direction = this.joystick.active
+        ? this.joystick.direction()
+        : this.keyboard.direction();
+      this.local.update(dt, direction, performance.now());
       this.avatars
         .get(this.myHex)
         ?.setTarget(this.local.pos.x, this.local.pos.z, this.local.heading);

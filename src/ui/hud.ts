@@ -4,6 +4,7 @@ import type { DbConnection } from '../module_bindings';
 import type { ServerClock } from '../net/clock';
 import { myPlot } from '../net/queries';
 import { PlotVotePanel } from './battle';
+import { COMPACT } from './layout';
 import { LobbyPanel } from './lobby';
 import type { Toast } from './toast';
 
@@ -40,6 +41,7 @@ export class RoundHud {
   ) as HTMLButtonElement;
   private readonly lobby: LobbyPanel;
   private readonly plotVotes: PlotVotePanel;
+  private lastPhase = '';
 
   constructor(
     private readonly conn: DbConnection,
@@ -50,6 +52,10 @@ export class RoundHud {
   ) {
     this.lobby = new LobbyPanel(conn, myHex, toast);
     this.plotVotes = new PlotVotePanel(conn, myHex, toast);
+    // On narrow screens the header collapses or expands the card.
+    this.root
+      .querySelector('.round-top')!
+      .addEventListener('click', () => this.root.classList.toggle('collapsed'));
     this.startButton.addEventListener('click', async () => {
       this.startButton.disabled = true;
       try {
@@ -70,6 +76,14 @@ export class RoundHud {
     const battle = state.mode.tag === 'Battle';
     const inLobby = phase === 'Lobby';
     this.root.hidden = false;
+    if (phase !== this.lastPhase && COMPACT.matches) {
+      // Phones: get the card out of the way while building, open it to vote.
+      this.root.classList.toggle(
+        'collapsed',
+        phase !== 'Lobby' && phase !== 'Voting',
+      );
+    }
+    this.lastPhase = phase;
     this.root.dataset.phase = phase;
     this.phaseEl.textContent = `Round ${state.round} · ${PHASE_LABELS[phase] ?? phase}`;
 

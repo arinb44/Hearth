@@ -29,7 +29,7 @@ The module is hosted on the Maincloud free tier, and the static web client is ho
    - The results screen shows the score and what each player contributed.
 8. **Activity feed.** Feed entries and placement effects ("Sam placed a House") come from an event table (new in 2.0), not from client-side guesses.
 9. **10 players.** 10 concurrent players on Maincloud with no visible lag. Verified with a 10-bot script plus real devices.
-10. **Laptops and phones.** On laptops: WASD to move, mouse to place and remove, keys to rotate and select pieces. On phones: a touch joystick, tap to place, and a piece palette. Must work in current Chrome, Edge and Safari, including iOS Safari and Android Chrome. *(Dropped on 2026-10-04 for Build Battle, then restored the same day because the schedule was well ahead.)*
+10. **Laptops and phones.** On laptops: WASD to move, mouse to place and remove, keys to rotate and select pieces. On phones, played in **landscape**: a touch joystick, tap to place, Turn and Remove buttons, and a piece palette. Holding a phone upright shows a 'turn your phone sideways' card; Android also gets fullscreen with a landscape lock. Must work in current Chrome, Edge and Safari, including iOS Safari and Android Chrome. *(Dropped on 2026-10-04 for Build Battle, then restored the same day because the schedule was well ahead.)*
 11. **Reconnecting.** A client that drops and reconnects sees the correct current state and keeps its identity.
 12. **Hosting.** The module runs on the Maincloud free tier and the client is reachable at a public URL. No paid services.
 13. **Look and feel.** A consistent low-poly look: one palette, sky and lighting, soft shadows, simple animations.
@@ -184,7 +184,7 @@ Time estimates total about 11.5 hours with a small buffer. **Cut line:** M0–M4
 | **M3b** | **Theme vote + Build Battle:** `idea`/`theme_vote` tables and lobby vote UI; battle mode with `plot` assignment, plot-only building, plot labels, `Voting` phase with `plot_vote`, winners in `round_result` | Unit tests (plots, tally, battle rules) and sync tests 6–7 pass | 2 h |
 | **M4** | **Deploy:** environment config, publish to Maincloud (after your `spacetime login`), frontend on the free host (D6), README; 10-bot run against Maincloud | Public URL plays end to end; bots run without errors | 1 h |
 | — | *Cut line: demoable game with both modes* | | |
-| **M5** | **Phones (restored 2026-10-04):** touch joystick, tap to place, responsive HUD, quality toggle | Tested on a phone-sized viewport and a laptop together | 1.25 h |
+| **M5** | **Phones (restored 2026-10-04), landscape only (user request):** touch joystick, tap to place, Turn/Remove tools, rotate-to-landscape card, compact landscape HUD, low-power rendering | Tested on a phone-sized viewport and a laptop together | 1.25 h |
 | **M6** | **Visual polish:** final low-poly assets (D5), lighting, water, particles, avatar walk cycle, results celebration | Looks consistent on laptops | 1.5 h |
 | **M7** | **Demo hardening:** reconnect UX, cleanup of idle and offline players, host-only reset / skip-phase reducer, full rehearsal (10 bots + devices), demo script in the README | All tests pass; rehearsal checklist done | 0.75 h |
 

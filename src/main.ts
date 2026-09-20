@@ -1,8 +1,10 @@
 import './ui/styles.css';
 import { Game } from './game/game';
+import { IS_TOUCH } from './input/touch';
 import { connect, type ConnectionStatus } from './net/connection';
 import { loadPieceModels } from './scene/modelLibrary';
 import { installModelLibrary } from './scene/pieceModels';
+import { setUpLandscape } from './ui/orientation';
 import { createWorld } from './scene/world';
 
 const MODEL_TIMEOUT_MS = 8000;
@@ -17,6 +19,12 @@ const modelsReady = Promise.race([
 ]).catch((err: unknown) => console.warn('Using built-in piece models:', err));
 
 const statusEl = document.getElementById('status')!;
+if (IS_TOUCH) {
+  document.body.classList.add('touch');
+  setUpLandscape();
+  document.getElementById('hint')!.textContent =
+    'Drag the joystick to walk · tap a tile to build';
+}
 
 function setStatus(status: ConnectionStatus, text: string): void {
   statusEl.dataset.status = status;

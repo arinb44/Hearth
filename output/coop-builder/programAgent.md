@@ -18,7 +18,7 @@ Build a good-looking multiplayer co-op building game that meets the "Best use of
 
   Every countdown runs on the server.
 - **Low-poly 3D world:** a tile terrain where players place and remove prefab pieces (trees, houses, rocks, paths, etc.), with walking low-poly avatars that show name tags.
-- **Easy to join:** players open a public URL on laptops (mouse and keyboard) or phones (touch). The module is hosted on the Maincloud free tier. *(Phone support was dropped and then restored on 2026-10-04.)*
+- **Easy to join:** players open a public URL on laptops (mouse and keyboard) or phones (touch, landscape). The module is hosted on the Maincloud free tier. *(Phone support was dropped and then restored on 2026-10-04.)*
 
 ## Specialization
 *From: "What do I specialize in?"*

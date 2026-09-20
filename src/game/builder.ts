@@ -12,6 +12,7 @@ import {
   type PieceKind,
 } from '../../spacetimedb/src/logic/pieces';
 import { PointerInput } from '../input/pointer';
+import { IS_TOUCH } from '../input/touch';
 import type { DbConnection } from '../module_bindings';
 import { buildRestriction, pieceAt } from '../net/queries';
 import { createGhostModel } from '../scene/pieceModels';
@@ -33,6 +34,7 @@ function errorMessage(err: unknown): string {
 export class Builder {
   private selected: PieceKind = 'house';
   private rotation = 0;
+  private removeMode = false;
   private enabled = false;
   private canBuildShown = true;
   private readonly hint = document.getElementById('hint')!;
@@ -79,7 +81,15 @@ export class Builder {
       onPrimary: (tile) => this.primary(tile),
       onSecondary: (tile) => this.remove(tile),
     });
-    this.palette = new Palette((kind) => this.select(kind));
+    this.palette = new Palette(
+      (kind) => this.select(kind),
+      IS_TOUCH
+        ? {
+            onRotate: () => (this.rotation = (this.rotation + 1) % 4),
+            onToggleRemove: () => this.setRemoveMode(!this.removeMode),
+          }
+        : undefined,
+    );
     this.select('house');
     this.setEnabled(false);
 
@@ -134,9 +144,10 @@ export class Builder {
     }
 
     const occupied = this.isOccupied(tile);
-    const error = occupied
-      ? this.checkModify(tile, pos)
-      : this.checkPlace(tile, pos);
+    const error =
+      occupied || this.removeMode
+        ? this.checkModify(tile, pos)
+        : this.checkPlace(tile, pos);
     const color = error ? INVALID : VALID;
 
     this.outline.visible = true;
@@ -144,15 +155,21 @@ export class Builder {
     (this.outline.material as THREE.LineBasicMaterial).color.copy(color);
 
     const ghost = this.ghost!;
-    ghost.visible = !occupied;
+    ghost.visible = !occupied && !this.removeMode;
     ghost.position.copy(this.outline.position);
     ghost.rotation.y = (this.rotation * Math.PI) / 2;
     this.ghostMaterial.color.copy(color);
   }
 
+  private setRemoveMode(on: boolean): void {
+    this.removeMode = on;
+    this.palette.setRemoveMode(on);
+  }
+
   private select(kind: PieceKind): void {
     this.selected = kind;
     this.palette.setSelected(kind);
+    this.setRemoveMode(false);
     this.ghost?.removeFromParent();
     this.ghost = createGhostModel(kind, this.ghostMaterial);
     this.ghost.visible = false;
@@ -189,8 +206,9 @@ export class Builder {
     });
   }
 
-  /** Left click: place on an empty tile, rotate an existing piece. */
+  /** Click or tap: place on an empty tile, rotate an existing piece (or remove, in remove mode). */
   private primary(tile: Tile): void {
+    if (this.removeMode) return this.remove(tile);
     const pos = this.playerPos();
     if (!this.enabled || !pos) return;
     const occupied = this.isOccupied(tile);

@@ -680,3 +680,307 @@ body {
 #hint[hidden] {
   display: none;
 }
+
+/* Touch: stop the browser from scrolling or zooming while playing. */
+canvas,
+#joystick {
+  touch-action: none;
+}
+
+#joystick {
+  position: absolute;
+  left: 22px;
+  bottom: 118px;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 6px 18px rgba(31, 42, 55, 0.18);
+  pointer-events: auto;
+}
+
+#joystick[hidden] {
+  display: none;
+}
+
+#joystick .knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 52px;
+  height: 52px;
+  margin: -26px 0 0 -26px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 3px 10px rgba(31, 42, 55, 0.25);
+}
+
+#palette button.tool {
+  background: #e7f5ff;
+}
+
+#palette button.tool.selected {
+  border-color: var(--bad);
+  background: #fff0f0;
+}
+
+#palette button.dimmed {
+  opacity: 0.45;
+}
+
+/* Compact HUD (narrow windows and landscape phones) around a clear center. */
+@media (max-width: 700px), (max-height: 500px) {
+  #hud {
+    padding: 10px;
+  }
+
+  .round-top {
+    cursor: pointer;
+  }
+
+  .round-top::after {
+    content: '▾';
+    margin-left: 6px;
+  }
+
+  #round {
+    top: 52px;
+    left: 10px;
+    width: min(260px, calc(100vw - 20px));
+    max-height: calc(100vh - 260px);
+    padding: 10px 12px;
+  }
+
+  #round.collapsed {
+    overflow: hidden;
+  }
+
+  #round.collapsed .round-top::after {
+    content: '▸';
+  }
+
+  #round.collapsed > :not(.round-top):not(h2) {
+    display: none;
+  }
+
+  #round h2 {
+    font-size: 16px;
+  }
+
+  .panel {
+    top: 10px;
+    right: 10px;
+    min-width: 0;
+    padding: 8px 10px;
+  }
+
+  /* Just the count on phones; the full list would cover the island. */
+  .panel ul {
+    display: none;
+  }
+
+  .panel h2 {
+    margin: 0;
+  }
+
+  #palette {
+    left: 10px;
+    right: 10px;
+    bottom: 12px;
+    transform: none;
+    max-width: none;
+    padding: 6px;
+  }
+
+  #palette button {
+    min-width: 50px;
+    padding: 4px 2px 2px;
+  }
+
+  #palette .icon {
+    font-size: 20px;
+  }
+
+  #palette kbd {
+    display: none;
+  }
+
+  #hint {
+    display: none;
+  }
+
+  #feed {
+    right: 10px;
+    bottom: 96px;
+    max-width: 55vw;
+  }
+
+  #feed li:nth-child(n + 4) {
+    display: none;
+  }
+
+  #toast {
+    bottom: 96px;
+    max-width: calc(100vw - 40px);
+    text-align: center;
+  }
+
+  #joystick {
+    left: 14px;
+    bottom: 96px;
+    width: 104px;
+    height: 104px;
+  }
+
+  #banner {
+    font-size: 24px;
+    padding: 12px 20px;
+  }
+}
+
+/* Phones play in landscape: portrait shows a "turn your phone" card over everything. */
+#rotate {
+  display: none;
+  z-index: 10;
+  background: rgba(191, 230, 245, 0.96);
+}
+
+.rotate-icon {
+  font-size: 56px;
+  animation: rotate-hint 1.8s ease-in-out infinite;
+}
+
+@keyframes rotate-hint {
+  0%,
+  30% {
+    transform: rotate(0deg);
+  }
+  60%,
+  100% {
+    transform: rotate(-90deg);
+  }
+}
+
+#go-landscape {
+  padding: 12px 14px;
+  border: none;
+  border-radius: 12px;
+  background: #2f9e44;
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+}
+
+@media (orientation: portrait) {
+  body.touch #rotate {
+    display: grid;
+  }
+}
+
+/* Landscape phones: short screens, joystick bottom-left, palette bottom-right. */
+@media (max-height: 500px) {
+  .pill {
+    padding: 5px 11px;
+    font-size: 12px;
+  }
+
+  /* Ends above the joystick (bottom 16px + 104px) so the two never overlap. */
+  #round {
+    top: 44px;
+    width: min(240px, 34vw);
+    max-height: calc(100vh - 180px);
+    padding: 8px 10px;
+  }
+
+  #round h2 {
+    font-size: 15px;
+  }
+
+  #round p {
+    display: none;
+  }
+
+  #palette {
+    left: auto;
+    right: 10px;
+    bottom: 8px;
+    max-width: calc(100vw - 150px);
+  }
+
+  body:not(.touch) #palette {
+    max-width: calc(100vw - 20px);
+  }
+
+  #joystick {
+    left: 16px;
+    bottom: 16px;
+    width: 104px;
+    height: 104px;
+  }
+
+  #feed {
+    bottom: 78px;
+  }
+
+  #feed li:nth-child(n + 3) {
+    display: none;
+  }
+
+  #toast {
+    bottom: 78px;
+  }
+
+  .card {
+    gap: 8px;
+    padding: 16px 18px;
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
+  }
+
+  .card h1 {
+    font-size: 22px;
+  }
+
+  #banner {
+    top: 30%;
+  }
+}
+
+/* Collapsible piece list: the toggle shows the current piece; collapsed hides the rest. */
+#palette button.toggle {
+  border-color: #2f9e44;
+  background: #ebfbee;
+}
+
+#palette button.toggle::after {
+  content: '◂';
+  position: absolute;
+  top: 2px;
+  right: 5px;
+  font-size: 10px;
+  opacity: 0.6;
+}
+
+#palette button.toggle[data-open='false']::after {
+  content: '▸';
+}
+
+#palette.collapsed button.piece {
+  display: none;
+}
+
+/* Expanded, the toggle is redundant with the highlighted piece: show just the arrow. */
+#palette:not(.collapsed) button.toggle {
+  min-width: 30px;
+}
+
+#palette:not(.collapsed) button.toggle .icon,
+#palette:not(.collapsed) button.toggle .label {
+  display: none;
+}
+
+#palette:not(.collapsed) button.toggle::after {
+  position: static;
+  font-size: 16px;
+}

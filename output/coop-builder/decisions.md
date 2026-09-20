@@ -37,3 +37,5 @@
 | 2026-10-04 | — | Local DBs owned by the lost local identity | Wipe local data / new local DB names | Wipe local server data (recommendation); dev + test DBs recreated |
 | 2026-10-04 | D5 | 3D assets for M6 | Kenney CC0 packs / refine procedural | Kenney CC0 packs (recommendation); downloads approved individually |
 | 2026-10-04 | — | Restore phone support (we were ahead of schedule) | Restore M5 / laptops only | Restore phones: M5 back after M6; requirement 10 and success criteria reinstated |
+| 2026-10-04 | — | Phone orientation | Portrait / landscape | **Landscape** (user request). Portrait shows a rotate card; Android tries fullscreen + orientation lock (iOS cannot lock) |
+| 2026-10-04 | — | Compact UI: collapse the assets | (user request) | Collapsible piece palette: the toggle shows the current piece; starts collapsed on compact layouts and re-collapses after a pick; expanded by default on large desktops; Turn/Remove stay visible |
