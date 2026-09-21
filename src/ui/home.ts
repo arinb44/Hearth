@@ -13,33 +13,24 @@ import {
 import type { DbConnection } from '../module_bindings';
 import type { Account, Island } from '../module_bindings/types';
 import { myIslandId } from '../net/queries';
+import { BuildsPanel } from './builds';
 import { colorDot } from './colors';
+import { el, errorMessage } from './dom';
+import { FriendsPanel } from './friends';
 import type { Toast } from './toast';
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
-
-function el<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  props: Partial<HTMLElementTagNameMap[K]> = {},
-  ...children: (Node | string)[]
-): HTMLElementTagNameMap[K] {
-  const node = Object.assign(document.createElement(tag), props);
-  node.append(...children);
-  return node;
-}
 
 /**
  * The main screen: create or recover an account, see your profile, stats, and
- * recovery code, then pick an island. Everything shown here is read live from the
- * database.
+ * recovery code, pick an island, manage friends, and save or load builds. Everything
+ * shown here is read live from the database.
  */
 export class HomeScreen {
   private readonly root = document.getElementById('home')!;
   private readonly body = this.root.querySelector<HTMLElement>('.home-body')!;
   // Re-rendered on its own, so live player counts never wipe a half-typed form.
   private readonly islandList = el('ul', { className: 'islands' });
+  private readonly friends: FriendsPanel;
+  private readonly builds: BuildsPanel;
   private codeVisible = false;
 
   constructor(
@@ -48,16 +39,26 @@ export class HomeScreen {
     private readonly toast: Toast,
     private readonly onEntered: () => void,
   ) {
+    this.friends = new FriendsPanel(conn, myHex, toast, (id, button) =>
+      this.enter(id, button),
+    );
+    this.builds = new BuildsPanel(conn, myHex, toast, onEntered);
     const refresh = () => this.render();
-    conn.db.account.onInsert(refresh);
-    conn.db.account.onUpdate(refresh);
-    conn.db.account.onDelete(refresh);
+    // Your own account redraws everything; anyone else's (presence, stats) only
+    // touches the lists, so a half-typed form survives.
+    const onAccount = (_ctx: unknown, row: Account) => {
+      if (row.owner.toHexString() === myHex) this.render();
+      else this.refreshLists();
+    };
+    conn.db.account.onInsert(onAccount);
+    conn.db.account.onUpdate((ctx, _old, row) => onAccount(ctx, row));
+    conn.db.account.onDelete(onAccount);
     conn.db.myRecoveryCode.onInsert(refresh);
     conn.db.myRecoveryCode.onDelete(refresh);
-    const refreshIslands = () => this.renderIslands();
-    conn.db.island.onInsert(refreshIslands);
-    conn.db.island.onUpdate(refreshIslands);
-    conn.db.island.onDelete(refreshIslands);
+    const refreshLists = () => this.refreshLists();
+    conn.db.island.onInsert(refreshLists);
+    conn.db.island.onUpdate(refreshLists);
+    conn.db.island.onDelete(refreshLists);
     conn.db.player.onInsert((_ctx, row) => {
       if (row.identity.toHexString() === myHex) this.render();
     });
@@ -86,6 +87,13 @@ export class HomeScreen {
       if (a.owner.toHexString() === this.myHex) return a;
     }
     return undefined;
+  }
+
+  private refreshLists(): void {
+    if (this.root.hidden) return;
+    this.renderIslands();
+    this.friends.render();
+    this.builds.render();
   }
 
   private call(action: Promise<void>, onDone?: () => void): void {
@@ -200,6 +208,8 @@ export class HomeScreen {
       ),
     );
 
+    this.friends.render();
+    this.builds.render();
     return [
       el(
         'div',
@@ -223,6 +233,8 @@ export class HomeScreen {
         'Use it to sign in on another device. Keep it secret: anyone with it can use your account.',
       ),
       ...this.islands(account),
+      this.friends.root,
+      this.builds.root,
     ];
   }
 

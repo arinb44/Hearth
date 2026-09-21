@@ -1,4 +1,3 @@
-import type { Identity } from 'spacetimedb';
 import { SenderError, t } from 'spacetimedb/server';
 import { tileKey } from './logic/grid';
 import {
@@ -31,14 +30,17 @@ import {
 import {
   accountOf,
   addStats,
+  hasSession,
   issueRecoveryCode,
   requireAccount,
+  syncPresence,
 } from './accounts';
 import {
   colorsInUse,
   createIslandRow,
   refreshPlayerCount,
   requireIsland,
+  requirePlayer,
   withdrawVotes,
 } from './islands';
 import {
@@ -60,6 +62,8 @@ import {
 import { accountSecret, phaseTimer, spacetimedb, type Ctx } from './schema';
 
 export default spacetimedb;
+export * from './friends';
+export * from './builds';
 
 type PlayerRow = NonNullable<
   ReturnType<Ctx['db']['player']['identity']['find']>
@@ -94,24 +98,10 @@ function requireName(raw: string): string {
   return name;
 }
 
-/** The caller's player row; they must be on an island. */
-function requirePlayer(ctx: Ctx): PlayerRow {
-  const row = ctx.db.player.identity.find(ctx.sender);
-  if (!row || row.islandId === NO_ISLAND) {
-    throw new SenderError('Enter an island first');
-  }
-  return row;
-}
-
 function requireAdmin(ctx: Ctx): void {
   if (!ctx.db.admin.identity.find(ctx.sender)) {
     throw new SenderError('Only the admin can do that');
   }
-}
-
-function hasSession(ctx: Ctx, identity: Identity): boolean {
-  for (const _ of ctx.db.session.identity.filter(identity)) return true;
-  return false;
 }
 
 /** Keeps `preferred` (the account's or last color) unless someone on the island has it. */
@@ -150,6 +140,7 @@ export const onConnect = spacetimedb.clientConnected((ctx) => {
     refreshPlayerCount(ctx, existing.islandId);
     ensureLobbyTimer(ctx, existing.islandId);
   }
+  syncPresence(ctx, ctx.sender);
 });
 
 export const onDisconnect = spacetimedb.clientDisconnected((ctx) => {
@@ -159,6 +150,7 @@ export const onDisconnect = spacetimedb.clientDisconnected((ctx) => {
     ctx.db.player.identity.update({ ...existing, online: false });
     refreshPlayerCount(ctx, existing.islandId);
   }
+  syncPresence(ctx, ctx.sender);
 });
 
 /** Puts the caller on an island (creating their player row), spawning near the middle. */
@@ -209,7 +201,10 @@ function moveToIsland(ctx: Ctx, islandId: bigint, name: string): void {
 /** Enters an island; `name` is only used by guests without an account. */
 export const enterIsland = spacetimedb.reducer(
   { islandId: t.u64(), name: t.string() },
-  (ctx, { islandId, name }) => moveToIsland(ctx, islandId, name),
+  (ctx, { islandId, name }) => {
+    moveToIsland(ctx, islandId, name);
+    syncPresence(ctx, ctx.sender);
+  },
 );
 
 /** Back to the main screen: the player leaves their island. */
@@ -218,6 +213,7 @@ export const leaveIsland = spacetimedb.reducer((ctx) => {
   withdrawVotes(ctx, ctx.sender);
   ctx.db.player.identity.update({ ...me, islandId: NO_ISLAND });
   refreshPlayerCount(ctx, me.islandId);
+  syncPresence(ctx, ctx.sender);
 });
 
 /** Creates an island owned by the caller's account and takes them there. */
@@ -237,6 +233,7 @@ export const createIsland = spacetimedb.reducer(
     }
     const created = createIslandRow(ctx, clean, account.id);
     moveToIsland(ctx, created.id, account.username);
+    syncPresence(ctx, ctx.sender);
   },
 );
 
@@ -513,11 +510,14 @@ export const createAccount = spacetimedb.reducer(
       wins: 0,
       piecesPlaced: 0,
       createdAt: ctx.timestamp,
+      online: false,
+      islandId: NO_ISLAND,
     });
     issueRecoveryCode(ctx, created.id);
     const playing = ctx.db.player.identity.find(ctx.sender);
     if (playing)
       ctx.db.player.identity.update({ ...playing, name: name.display });
+    syncPresence(ctx, ctx.sender);
   },
 );
 
@@ -541,6 +541,7 @@ export const recoverAccount = spacetimedb.reducer(
     const recovered = ctx.db.account.id.find(secret.accountId)!;
     ctx.db.account.id.update({ ...recovered, owner: ctx.sender });
     issueRecoveryCode(ctx, recovered.id);
+    syncPresence(ctx, ctx.sender);
   },
 );
 

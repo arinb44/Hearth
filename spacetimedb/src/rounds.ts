@@ -2,7 +2,7 @@
 // transaction, so all clients on an island see one consistent phase, theme, and countdown.
 import { ScheduleAt, Timestamp, type Identity } from 'spacetimedb';
 import { CHALLENGES, challengeById } from './logic/challenges';
-import { NO_ISLAND, plotKey } from './logic/islands';
+import { autoStartsRounds, NO_ISLAND, plotKey } from './logic/islands';
 import {
   secondsToMicros,
   remainingFraction,
@@ -110,9 +110,14 @@ export function isCurrentTimer(
   return firesAt === state.phaseEndsAt.microsSinceUnixEpoch;
 }
 
-/** Starts the island's lobby countdown if it is enabled, idle, and someone is there. */
+/**
+ * Starts the island's lobby countdown if it is enabled, idle, and someone is there.
+ * Only the main island has one; player islands wait for someone to press Start.
+ */
 export function ensureLobbyTimer(ctx: Ctx, islandId: bigint): void {
   if (islandId === NO_ISLAND) return;
+  const island = ctx.db.island.id.find(islandId);
+  if (!island || !autoStartsRounds(island.ownerAccountId)) return;
   const state = requireGameState(ctx, islandId);
   const { lobbySeconds } = requireTiming(ctx);
   if (state.phase.tag !== 'Lobby' || state.phaseEndsAt || lobbySeconds === 0)

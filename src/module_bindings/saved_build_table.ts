@@ -9,17 +9,17 @@ import {
   type AlgebraicTypeType as __AlgebraicTypeType,
   type Infer as __Infer,
 } from "spacetimedb";
+import {
+  SavedPiece,
+} from "./types";
+
 
 export default __t.row({
   id: __t.u64().primaryKey(),
-  owner: __t.identity(),
-  username: __t.string(),
-  usernameKey: __t.string().name("username_key"),
-  colorIndex: __t.u8().name("color_index"),
-  roundsPlayed: __t.u32().name("rounds_played"),
-  wins: __t.u32(),
-  piecesPlaced: __t.u32().name("pieces_placed"),
+  ownerAccountId: __t.u64().name("owner_account_id"),
+  name: __t.string(),
+  get pieces() {
+    return __t.array(SavedPiece);
+  },
   createdAt: __t.timestamp().name("created_at"),
-  online: __t.bool(),
-  islandId: __t.u64().name("island_id"),
 });

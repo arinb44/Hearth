@@ -16,6 +16,14 @@ export const ISLAND_NAME_MAX = 24;
 export const MAX_ISLAND_PLAYERS = 10;
 export const MAX_ISLANDS_PER_ACCOUNT = 3;
 
+/**
+ * Only the main island starts rounds on its own after the lobby countdown. Player
+ * islands stay in the lobby (free building, or a loaded build) until someone presses Start.
+ */
+export function autoStartsRounds(ownerAccountId: bigint): boolean {
+  return ownerAccountId === NO_OWNER;
+}
+
 /** Suggested name for a new island; long usernames get the shorter "Isle". */
 export function defaultIslandName(username: string): string {
   const island = username + "'s Island";

@@ -20,6 +20,8 @@ function easeOutBack(t: number): number {
 }
 
 interface Placed {
+  /** The `piece` row drawn here; a tile can get a new row in the same transaction. */
+  id: bigint;
   object: THREE.Group;
   kind: PieceKind;
   rotation: number;
@@ -43,12 +45,14 @@ export class PieceLayer {
     if (!isPieceKind(row.kind)) return;
     const existing = this.placed.get(row.tileKey);
     if (existing && existing.kind === row.kind) {
+      existing.id = row.id;
       existing.rotation = row.rotation;
       this.draw(existing);
       return;
     }
     existing?.object.removeFromParent();
     const entry: Placed = {
+      id: row.id,
       object: new THREE.Group(),
       kind: row.kind,
       rotation: row.rotation,
@@ -61,8 +65,15 @@ export class PieceLayer {
     this.redrawNeighbours(row.tileX, row.tileZ);
   }
 
+  /**
+   * Removes the row's model. When one transaction replaces a tile's piece (loading a
+   * build), the new row's insert can arrive before the old row's delete, so only the
+   * row actually drawn on the tile is removed.
+   */
   remove(row: Piece): void {
-    this.placed.get(row.tileKey)?.object.removeFromParent();
+    const entry = this.placed.get(row.tileKey);
+    if (!entry || entry.id !== row.id) return;
+    entry.object.removeFromParent();
     this.placed.delete(row.tileKey);
     this.redrawNeighbours(row.tileX, row.tileZ);
   }

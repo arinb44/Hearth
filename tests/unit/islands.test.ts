@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { GRID_SIZE, tileKey } from '../../spacetimedb/src/logic/grid';
 import {
+  autoStartsRounds,
   cellKey,
   defaultIslandName,
   ISLAND_NAME_MAX,
+  NO_OWNER,
   parseIslandName,
   plotKey,
 } from '../../spacetimedb/src/logic/islands';
@@ -47,5 +49,13 @@ describe('island names', () => {
     const long = defaultIslandName('Sixteen Chars Ab');
     expect(long.length).toBeLessThanOrEqual(ISLAND_NAME_MAX);
     expect(parseIslandName(long)).toBe(long);
+  });
+});
+
+describe('round auto-start', () => {
+  it('runs on the main island only', () => {
+    expect(autoStartsRounds(NO_OWNER)).toBe(true);
+    expect(autoStartsRounds(1n)).toBe(false);
+    expect(autoStartsRounds(42n)).toBe(false);
   });
 });

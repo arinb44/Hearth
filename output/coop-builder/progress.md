@@ -1,9 +1,10 @@
 # Progress: coop-builder
 
 - **Current phase:** Phase 4 (Implementation), plan Revision 5 (accounts, friends, islands, saved data)
-- **Status:** Stopped after M8b at the user's request (M8a and M8b committed, not pushed). M8c not started.
+- **Status:** M8c complete, waiting for the user's OK to commit (M8a and M8b committed, nothing pushed). New user requests (Revision 6) waiting for answers and plan approval.
 
 ## Completed Milestones
+- 2026-10-04: **M8c complete (not committed yet).** Friends: `friend_request` + `friendship` tables keyed by account id with a unique `pairKey`, and client visibility filters (`spacetimedb.clientVisibilityFilter.sql`, joined with `account` on `:sender`) so only the two accounts see a row. Reducers `send_friend_request` (case-insensitive username; asking someone who asked you accepts; rejects self, duplicates, existing friends; caps 50 friends / 20 pending), `accept_friend_request`, `decline_friend_request` (also cancels your own), `remove_friend`. Presence (user's choice): `account.online` + `account.islandId`, set by `syncPresence` on connect, disconnect, enter, leave, create, recover (never on movement). Saved builds: `saved_build` (owner-only filter), `save_build` (board of the island you are on; cap 10), `load_build` (your own island, Lobby only; replaces the board, feed event), `delete_build`. Only the Main Island auto-starts rounds now (user's choice). Client: `src/ui/friends.ts` (add, requests, list with presence, island, Join, Remove) and `src/ui/builds.ts` (save, list, load, delete) on the main screen; `src/ui/dom.ts` shared helpers; others' account updates no longer redraw the whole main screen. Bug found in the browser check and fixed: `PieceLayer` removed a tile's new piece when the old row's delete arrived after the new row's insert (load replaces same-tile pieces in one transaction); it now removes by row id, with a unit test. Tests 113/113 (81 unit, 32 sync), incl. `tests/sync/friends.test.ts` (visibility to a third account and a late subscriber, rejections, ask-back, decline/cancel/remove, presence, join) and `tests/sync/builds.test.ts` (owner-only visibility, load restores the board for every client, rejections, cap, auto-start rule). Browser check (two tabs on a new local DB `coop-builder-m8c`, Vite 5174 via gitignored `.env.m8c.local`): request, accept, live presence, Join, save, load. The dev DB `coop-builder` still has the M8b schema (needs a wipe + republish, with approval).
 - 2026-10-03: Project root confirmed: `C:\Users\arins\Arin\School\UMich\MHacks\spacetime-market` (new subfolder; no earlier program-agent work).
 - 2026-10-04: Phase 1 setup interview complete and confirmed. Slug `coop-builder`.
 - 2026-10-04: Phase 2 complete: `programAgent.md` approved (including the proposed coding standards).
@@ -40,6 +41,11 @@
 - Node is at `C:\Program Files\nodejs`. Prepend it to PATH in shells opened before the install.
 
 ## Next Step
+1. Ask to commit M8c (files + message shown in chat).
+2. Revision 6 (user requests on 2026-10-04, after M8c): fireflies stack on non-building pieces; stone walls that connect to towers; no objectives in co-op (free build on a theme) and nothing stops building until time is up; score = total pieces with adjacency multipliers (e.g. bridge next to water, lamp next to tile or path); co-op together, Build Battle on a private island; Escape opens the menu (exit to main menu, islands, friends). Get answers to the open design questions, write Revision 6 into `plan.md`, get approval, then build.
+3. Shipping (Maincloud publish with `--delete-data`, push): timing to be decided with the user.
+
+Earlier next step (done):
 When the user resumes, confirm starting M8c: `friend_request` + `friendship` tables with a client visibility filter, send/accept/decline/remove reducers, a friends list with online status, island, and Join; `saved_build` with `save_build` and `load_build` (island owner, Lobby only); main screen UI; sync tests; browser check. After M8c: ask approval for the Maincloud publish with `--delete-data` (wipes live test/bot data), push `e70df6f` + M8b + M8c, then update README, summary and progress. See `handoff.md` in this folder.
 
 Older notes, kept for reference:

@@ -45,14 +45,18 @@ export function connect(events: ConnectionEvents): DbConnection {
           events.onReady(conn, identity);
         })
         .onError(() => events.onStatus('error', 'Subscription failed'))
-        // Always-on rows: accounts, islands, and your own player row (which says
-        // which island you are on). Island rows come from IslandSubscription.
+        // Always-on rows: accounts, islands, your own player row (which says which
+        // island you are on), and your friends and builds (the module's visibility
+        // filters send only your own). Island rows come from IslandSubscription.
         .subscribe([
           tables.config,
           tables.account,
           tables.myRecoveryCode,
           tables.island,
           tables.player.where((r) => r.identity.eq(identity)),
+          tables.friendRequest,
+          tables.friendship,
+          tables.savedBuild,
         ]);
     })
     .onDisconnect(() => events.onStatus('disconnected'))

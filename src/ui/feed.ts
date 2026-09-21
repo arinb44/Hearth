@@ -18,6 +18,8 @@ function describe(e: Activity): string | null {
       return `removed a ${piece}`;
     case 'idea':
       return `suggested “${e.pieceKind}”`;
+    case 'loaded':
+      return `loaded the build “${e.pieceKind}”`;
     default:
       return null;
   }

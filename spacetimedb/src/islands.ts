@@ -11,6 +11,15 @@ export function requireIsland(ctx: Ctx, islandId: bigint) {
   return row;
 }
 
+/** The caller's player row; they must be on an island. */
+export function requirePlayer(ctx: Ctx) {
+  const row = ctx.db.player.identity.find(ctx.sender);
+  if (!row || row.islandId === NO_ISLAND) {
+    throw new SenderError('Enter an island first');
+  }
+  return row;
+}
+
 export function mainIsland(ctx: Ctx) {
   for (const row of ctx.db.island.ownerAccountId.filter(NO_OWNER)) return row;
   throw new Error('main island is missing');

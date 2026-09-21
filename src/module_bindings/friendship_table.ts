@@ -12,14 +12,8 @@ import {
 
 export default __t.row({
   id: __t.u64().primaryKey(),
-  owner: __t.identity(),
-  username: __t.string(),
-  usernameKey: __t.string().name("username_key"),
-  colorIndex: __t.u8().name("color_index"),
-  roundsPlayed: __t.u32().name("rounds_played"),
-  wins: __t.u32(),
-  piecesPlaced: __t.u32().name("pieces_placed"),
-  createdAt: __t.timestamp().name("created_at"),
-  online: __t.bool(),
-  islandId: __t.u64().name("island_id"),
+  pairKey: __t.string().name("pair_key"),
+  accountA: __t.u64().name("account_a"),
+  accountB: __t.u64().name("account_b"),
+  since: __t.timestamp(),
 });

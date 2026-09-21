@@ -20,6 +20,8 @@ export const Account = __t.object("Account", {
   wins: __t.u32(),
   piecesPlaced: __t.u32(),
   createdAt: __t.timestamp(),
+  online: __t.bool(),
+  islandId: __t.u64(),
 });
 export type Account = __Infer<typeof Account>;
 
@@ -62,6 +64,24 @@ export const Contribution = __t.object("Contribution", {
   votes: __t.u16(),
 });
 export type Contribution = __Infer<typeof Contribution>;
+
+export const FriendRequest = __t.object("FriendRequest", {
+  id: __t.u64(),
+  pairKey: __t.string(),
+  fromAccountId: __t.u64(),
+  toAccountId: __t.u64(),
+  createdAt: __t.timestamp(),
+});
+export type FriendRequest = __Infer<typeof FriendRequest>;
+
+export const Friendship = __t.object("Friendship", {
+  id: __t.u64(),
+  pairKey: __t.string(),
+  accountA: __t.u64(),
+  accountB: __t.u64(),
+  since: __t.timestamp(),
+});
+export type Friendship = __Infer<typeof Friendship>;
 
 export const GameState = __t.object("GameState", {
   islandId: __t.u64(),
@@ -196,6 +216,25 @@ export const RoundResult = __t.object("RoundResult", {
   endedAt: __t.timestamp(),
 });
 export type RoundResult = __Infer<typeof RoundResult>;
+
+export const SavedBuild = __t.object("SavedBuild", {
+  id: __t.u64(),
+  ownerAccountId: __t.u64(),
+  name: __t.string(),
+  get pieces() {
+    return __t.array(SavedPiece);
+  },
+  createdAt: __t.timestamp(),
+});
+export type SavedBuild = __Infer<typeof SavedBuild>;
+
+export const SavedPiece = __t.object("SavedPiece", {
+  kind: __t.string(),
+  tileX: __t.u8(),
+  tileZ: __t.u8(),
+  rotation: __t.u8(),
+});
+export type SavedPiece = __Infer<typeof SavedPiece>;
 
 export const Session = __t.object("Session", {
   connectionId: __t.connectionId(),

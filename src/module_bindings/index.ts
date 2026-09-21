@@ -34,18 +34,25 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import AcceptFriendRequestReducer from "./accept_friend_request_reducer";
 import ConfigureTimingReducer from "./configure_timing_reducer";
 import CreateAccountReducer from "./create_account_reducer";
 import CreateIslandReducer from "./create_island_reducer";
+import DeclineFriendRequestReducer from "./decline_friend_request_reducer";
+import DeleteBuildReducer from "./delete_build_reducer";
 import EnterIslandReducer from "./enter_island_reducer";
 import LeaveIslandReducer from "./leave_island_reducer";
+import LoadBuildReducer from "./load_build_reducer";
 import MoveReducer from "./move_reducer";
 import NewRecoveryCodeReducer from "./new_recovery_code_reducer";
 import PlacePieceReducer from "./place_piece_reducer";
 import RecoverAccountReducer from "./recover_account_reducer";
+import RemoveFriendReducer from "./remove_friend_reducer";
 import RemovePieceReducer from "./remove_piece_reducer";
 import ResetGameReducer from "./reset_game_reducer";
 import RotatePieceReducer from "./rotate_piece_reducer";
+import SaveBuildReducer from "./save_build_reducer";
+import SendFriendRequestReducer from "./send_friend_request_reducer";
 import SetNameReducer from "./set_name_reducer";
 import SkipPhaseReducer from "./skip_phase_reducer";
 import StartRoundReducer from "./start_round_reducer";
@@ -59,6 +66,8 @@ import VoteThemeReducer from "./vote_theme_reducer";
 import AccountRow from "./account_table";
 import ActivityRow from "./activity_table";
 import ConfigRow from "./config_table";
+import FriendRequestRow from "./friend_request_table";
+import FriendshipRow from "./friendship_table";
 import GameStateRow from "./game_state_table";
 import IdeaRow from "./idea_table";
 import IslandRow from "./island_table";
@@ -68,6 +77,7 @@ import PlayerRow from "./player_table";
 import PlotRow from "./plot_table";
 import PlotVoteRow from "./plot_vote_table";
 import RoundResultRow from "./round_result_table";
+import SavedBuildRow from "./saved_build_table";
 import ThemeVoteRow from "./theme_vote_table";
 
 /** Type-only namespace exports for generated type groups. */
@@ -112,6 +122,48 @@ const tablesSchema = __schema({
       { name: 'config_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, ConfigRow),
+  friendRequest: __table({
+    name: 'friend_request',
+    indexes: [
+      { accessor: 'fromAccountId', name: 'friend_request_from_account_id_idx_btree', algorithm: 'btree', columns: [
+        'fromAccountId',
+      ] },
+      { accessor: 'id', name: 'friend_request_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'pairKey', name: 'friend_request_pair_key_idx_btree', algorithm: 'btree', columns: [
+        'pairKey',
+      ] },
+      { accessor: 'toAccountId', name: 'friend_request_to_account_id_idx_btree', algorithm: 'btree', columns: [
+        'toAccountId',
+      ] },
+    ],
+    constraints: [
+      { name: 'friend_request_id_key', constraint: 'unique', columns: ['id'] },
+      { name: 'friend_request_pair_key_key', constraint: 'unique', columns: ['pairKey'] },
+    ],
+  }, FriendRequestRow),
+  friendship: __table({
+    name: 'friendship',
+    indexes: [
+      { accessor: 'accountA', name: 'friendship_account_a_idx_btree', algorithm: 'btree', columns: [
+        'accountA',
+      ] },
+      { accessor: 'accountB', name: 'friendship_account_b_idx_btree', algorithm: 'btree', columns: [
+        'accountB',
+      ] },
+      { accessor: 'id', name: 'friendship_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'pairKey', name: 'friendship_pair_key_idx_btree', algorithm: 'btree', columns: [
+        'pairKey',
+      ] },
+    ],
+    constraints: [
+      { name: 'friendship_id_key', constraint: 'unique', columns: ['id'] },
+      { name: 'friendship_pair_key_key', constraint: 'unique', columns: ['pairKey'] },
+    ],
+  }, FriendshipRow),
   gameState: __table({
     name: 'game_state',
     indexes: [
@@ -239,6 +291,20 @@ const tablesSchema = __schema({
       { name: 'round_result_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, RoundResultRow),
+  savedBuild: __table({
+    name: 'saved_build',
+    indexes: [
+      { accessor: 'id', name: 'saved_build_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'ownerAccountId', name: 'saved_build_owner_account_id_idx_btree', algorithm: 'btree', columns: [
+        'ownerAccountId',
+      ] },
+    ],
+    constraints: [
+      { name: 'saved_build_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, SavedBuildRow),
   themeVote: __table({
     name: 'theme_vote',
     indexes: [
@@ -264,18 +330,25 @@ const tablesSchema = __schema({
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("accept_friend_request", AcceptFriendRequestReducer),
   __reducerSchema("configure_timing", ConfigureTimingReducer),
   __reducerSchema("create_account", CreateAccountReducer),
   __reducerSchema("create_island", CreateIslandReducer),
+  __reducerSchema("decline_friend_request", DeclineFriendRequestReducer),
+  __reducerSchema("delete_build", DeleteBuildReducer),
   __reducerSchema("enter_island", EnterIslandReducer),
   __reducerSchema("leave_island", LeaveIslandReducer),
+  __reducerSchema("load_build", LoadBuildReducer),
   __reducerSchema("move", MoveReducer),
   __reducerSchema("new_recovery_code", NewRecoveryCodeReducer),
   __reducerSchema("place_piece", PlacePieceReducer),
   __reducerSchema("recover_account", RecoverAccountReducer),
+  __reducerSchema("remove_friend", RemoveFriendReducer),
   __reducerSchema("remove_piece", RemovePieceReducer),
   __reducerSchema("reset_game", ResetGameReducer),
   __reducerSchema("rotate_piece", RotatePieceReducer),
+  __reducerSchema("save_build", SaveBuildReducer),
+  __reducerSchema("send_friend_request", SendFriendRequestReducer),
   __reducerSchema("set_name", SetNameReducer),
   __reducerSchema("skip_phase", SkipPhaseReducer),
   __reducerSchema("start_round", StartRoundReducer),

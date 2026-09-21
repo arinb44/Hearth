@@ -208,6 +208,8 @@ const plotVote = table(
 );
 
 // Accounts: a unique username bound to the owner's identity, plus saved stats.
+// `online` and `islandId` (NO_ISLAND when offline or on the main screen) feed the
+// friends list; they change only on connect, disconnect, and island moves.
 export const account = table(
   { name: 'account', public: true },
   {
@@ -219,6 +221,53 @@ export const account = table(
     roundsPlayed: t.u32(),
     wins: t.u32(),
     piecesPlaced: t.u32(),
+    createdAt: t.timestamp(),
+    online: t.bool(),
+    islandId: t.u64(),
+  },
+);
+
+// Friends link accounts (not identities), so they survive account recovery. `pairKey`
+// is unique: two accounts have at most one pending request and one friendship. The
+// visibility filters in friends.ts show each row only to the two accounts involved.
+export const friendRequest = table(
+  { name: 'friend_request', public: true },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    pairKey: t.string().unique(),
+    fromAccountId: t.u64().index('btree'),
+    toAccountId: t.u64().index('btree'),
+    createdAt: t.timestamp(),
+  },
+);
+
+// `accountA` is the lower account id.
+export const friendship = table(
+  { name: 'friendship', public: true },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    pairKey: t.string().unique(),
+    accountA: t.u64().index('btree'),
+    accountB: t.u64().index('btree'),
+    since: t.timestamp(),
+  },
+);
+
+const SavedPiece = t.object('SavedPiece', {
+  kind: t.string(),
+  tileX: t.u8(),
+  tileZ: t.u8(),
+  rotation: t.u8(),
+});
+
+// Board snapshots kept on an account; only their owner can see them (filter in builds.ts).
+export const savedBuild = table(
+  { name: 'saved_build', public: true },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    ownerAccountId: t.u64().index('btree'),
+    name: t.string(),
+    pieces: t.array(SavedPiece),
     createdAt: t.timestamp(),
   },
 );
@@ -250,6 +299,9 @@ export const spacetimedb = schema({
   plotVote,
   account,
   accountSecret,
+  friendRequest,
+  friendship,
+  savedBuild,
 });
 
 export type Ctx = ReducerCtx<InferSchema<typeof spacetimedb>>;

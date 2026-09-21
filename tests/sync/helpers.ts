@@ -96,3 +96,34 @@ export function adminCall(reducer: string, ...args: string[]): void {
     },
   );
 }
+
+export interface AccountClient extends TestClient {
+  username: string;
+  accountId: bigint;
+}
+
+/** Connects a client and creates an account for it; usernames are unique per run. */
+export async function connectWithAccount(base: string): Promise<AccountClient> {
+  const client = await connectClient();
+  const username = base + Math.random().toString(36).slice(2, 7);
+  await client.conn.reducers.createAccount({ username });
+  const mine = () =>
+    [...client.conn.db.account.iter()].find((a) =>
+      a.owner.isEqual(client.identity),
+    );
+  await waitFor(() => mine() !== undefined, `${username}'s account`);
+  return { ...client, username, accountId: mine()!.id };
+}
+
+/**
+ * Waits until the client has received every update committed before this call.
+ * Updates reach a client in commit order, so once its own later change (a fresh
+ * recovery code) arrives, everything earlier has too.
+ */
+export async function settle(client: AccountClient): Promise<void> {
+  const code = () => [...client.conn.db.myRecoveryCode.iter()][0]?.recoveryCode;
+  await waitFor(() => code() !== undefined, `${client.username}'s code`);
+  const before = code();
+  await client.conn.reducers.newRecoveryCode({});
+  await waitFor(() => code() !== before, `${client.username} settled`);
+}

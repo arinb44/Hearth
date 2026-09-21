@@ -1140,6 +1140,10 @@ canvas,
   min-width: 0;
 }
 
+.home-form[hidden] {
+  display: none;
+}
+
 .card button.secondary {
   background: #4dabf7;
 }
@@ -1209,7 +1213,8 @@ canvas,
   padding: 14px;
 }
 
-.islands {
+.islands,
+.rows {
   display: grid;
   gap: 6px;
   margin: 0;
@@ -1217,7 +1222,8 @@ canvas,
   list-style: none;
 }
 
-.islands li {
+.islands li,
+.rows li {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1231,12 +1237,18 @@ canvas,
   box-shadow: inset 0 0 0 2px #69db7c;
 }
 
-.islands li div {
+.islands li div,
+.rows li div {
   display: grid;
   min-width: 0;
 }
 
-.islands li strong {
+.rows li div {
+  flex: 1;
+}
+
+.islands li strong,
+.rows li strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1246,6 +1258,48 @@ canvas,
   flex: none;
   padding: 8px 14px;
   font-size: 14px;
+}
+
+/* Friends and saved builds */
+.home-section {
+  display: grid;
+  gap: 8px;
+}
+
+.rows li.empty {
+  display: block;
+  background: none;
+  padding: 2px 0;
+}
+
+.rows .actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+
+.card .rows button:not(.link) {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.card .rows button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.presence {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #adb5bd;
+}
+
+.presence.online {
+  background: #40c057;
+  box-shadow: 0 0 0 3px rgba(64, 192, 87, 0.2);
 }
 
 #menu-button {
