@@ -984,3 +984,98 @@ canvas,
   position: static;
   font-size: 16px;
 }
+
+/* Palette sections: closed, a section is one button; open, a small label sits above
+   its row of pieces. Only one section is open at a time. */
+#palette {
+  align-items: flex-end;
+}
+
+#palette .group {
+  display: grid;
+  gap: 3px;
+}
+
+#palette .group.open {
+  padding: 0 4px;
+  border-left: 1px solid rgba(31, 42, 55, 0.12);
+  border-right: 1px solid rgba(31, 42, 55, 0.12);
+}
+
+#palette .group-head::after {
+  content: '▸';
+  position: absolute;
+  top: 2px;
+  right: 5px;
+  font-size: 10px;
+  opacity: 0.6;
+}
+
+#palette .group.open .group-head {
+  display: flex;
+  min-width: 0;
+  padding: 0 2px;
+  border: none;
+  background: none;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+#palette .group.open .group-head .icon {
+  display: none;
+}
+
+#palette .group.open .group-head::after {
+  content: ' ◂';
+  position: static;
+  font-size: 10px;
+}
+
+#palette .group:not(.open) .row {
+  display: none;
+}
+
+#palette .row {
+  display: flex;
+  gap: 6px;
+}
+
+#palette.collapsed .group {
+  display: none;
+}
+
+#settings {
+  position: absolute;
+  top: 16px;
+  right: 220px;
+  display: flex;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+#settings button {
+  padding: 6px 10px;
+  border: none;
+  border-radius: 999px;
+  background: var(--panel);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 14px rgba(31, 42, 55, 0.12);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+@media (max-width: 700px), (max-height: 500px) {
+  #settings {
+    top: 10px;
+    right: 120px;
+  }
+
+  #settings button .label {
+    display: none;
+  }
+}

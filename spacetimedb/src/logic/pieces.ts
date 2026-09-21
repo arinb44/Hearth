@@ -4,6 +4,7 @@ import { inBounds, tileToWorld, type Tile } from './grid';
 import { plotOfTile } from './plots';
 import type { Vec2 } from './movement';
 
+// The first ten keep their 1–0 hotkeys; newer kinds are appended after them.
 export const PIECE_KINDS = [
   'house',
   'tree',
@@ -15,6 +16,12 @@ export const PIECE_KINDS = [
   'well',
   'lamp',
   'tower',
+  'water',
+  'tile',
+  'bridge',
+  'grass',
+  'fireflies',
+  'bench',
 ] as const;
 export type PieceKind = (typeof PIECE_KINDS)[number];
 
@@ -29,7 +36,24 @@ export const PIECE_LABELS: Record<PieceKind, string> = {
   well: 'Well',
   lamp: 'Lamp',
   tower: 'Tower',
+  water: 'Water',
+  tile: 'Stone Tile',
+  bridge: 'Bridge',
+  grass: 'Grass',
+  fireflies: 'Fireflies',
+  bench: 'Bench',
 };
+
+/** Palette groups, in display order; every kind appears in exactly one. */
+export const PIECE_CATEGORIES: { name: string; kinds: PieceKind[] }[] = [
+  { name: 'Buildings', kinds: ['house', 'tower', 'well', 'bridge'] },
+  { name: 'Greenery', kinds: ['tree', 'pine', 'flowers', 'grass'] },
+  { name: 'Furniture', kinds: ['fence', 'lamp', 'bench'] },
+  {
+    name: 'Environment',
+    kinds: ['path', 'tile', 'water', 'rock', 'fireflies'],
+  },
+];
 
 /** How far (world units) from your avatar you can build. */
 export const BUILD_REACH = 4.5;

@@ -2,9 +2,11 @@ import * as THREE from 'three';
 import type { PieceKind } from '../../spacetimedb/src/logic/pieces';
 import {
   createConnectedModel,
-  installConnectorMaterials,
+  installConnectorKit,
   isConnective,
+  type ConnectiveKind,
 } from './connectedModels';
+import { createFireflies, createLampGlow } from './glow';
 import type { ModelLibrary } from './modelLibrary';
 
 // Procedural low-poly models, one per piece kind, each fitting a 1×1 tile with its
@@ -23,7 +25,6 @@ const M = {
   pine: mat('#2f7d4f'),
   stone: mat('#a3a7ab'),
   stoneLight: mat('#c9c3b8'),
-  path: mat('#dccba5'),
   water: mat('#4fc0dd'),
   towerRoof: mat('#4a6fa5'),
   dark: mat('#33363d'),
@@ -45,7 +46,12 @@ function mesh(
   return m;
 }
 
-const builders: Record<PieceKind, () => THREE.Object3D[]> = {
+// Fallbacks used until (or unless) the Kenney models load. Connective kinds are drawn
+// by connectedModels.ts and fireflies by glow.ts.
+const builders: Record<
+  Exclude<PieceKind, ConnectiveKind | 'fireflies'>,
+  () => THREE.Object3D[]
+> = {
   house: () => {
     const roof = mesh(new THREE.ConeGeometry(0.6, 0.42, 4), M.roof, 0, 0.71);
     roof.rotation.y = Math.PI / 4;
@@ -85,17 +91,6 @@ const builders: Record<PieceKind, () => THREE.Object3D[]> = {
     );
     return [big, small];
   },
-  path: () => [
-    mesh(new THREE.BoxGeometry(0.94, 0.04, 0.94), M.path, 0, 0.02),
-    mesh(
-      new THREE.BoxGeometry(0.22, 0.03, 0.18),
-      M.stoneLight,
-      -0.22,
-      0.05,
-      -0.2,
-    ),
-    mesh(new THREE.BoxGeometry(0.2, 0.03, 0.22), M.stoneLight, 0.2, 0.05, 0.18),
-  ],
   flowers: () => {
     const spots: [number, number][] = [
       [-0.25, -0.2],
@@ -121,13 +116,6 @@ const builders: Record<PieceKind, () => THREE.Object3D[]> = {
       ),
     ]);
   },
-  fence: () => [
-    mesh(new THREE.BoxGeometry(0.08, 0.4, 0.08), M.wood, -0.4, 0.2),
-    mesh(new THREE.BoxGeometry(0.08, 0.4, 0.08), M.wood, 0, 0.2),
-    mesh(new THREE.BoxGeometry(0.08, 0.4, 0.08), M.wood, 0.4, 0.2),
-    mesh(new THREE.BoxGeometry(0.96, 0.06, 0.04), M.wood, 0, 0.3),
-    mesh(new THREE.BoxGeometry(0.96, 0.06, 0.04), M.wood, 0, 0.15),
-  ],
   well: () => {
     const roof = mesh(new THREE.ConeGeometry(0.42, 0.24, 4), M.roof, 0, 0.82);
     roof.rotation.y = Math.PI / 4;
@@ -144,6 +132,22 @@ const builders: Record<PieceKind, () => THREE.Object3D[]> = {
     mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.8, 5), M.dark, 0, 0.44),
     mesh(new THREE.BoxGeometry(0.16, 0.18, 0.16), M.glow, 0, 0.92),
     mesh(new THREE.ConeGeometry(0.14, 0.1, 4), M.dark, 0, 1.06),
+    createLampGlow(0.92),
+  ],
+  grass: () =>
+    [
+      [-0.2, -0.18],
+      [0.2, -0.05],
+      [-0.05, 0.22],
+      [0.24, 0.26],
+    ].map(([x, z]) =>
+      mesh(new THREE.ConeGeometry(0.1, 0.26, 4), M.leaf, x, 0.13, z),
+    ),
+  bench: () => [
+    mesh(new THREE.BoxGeometry(0.75, 0.05, 0.24), M.wood, 0, 0.2),
+    mesh(new THREE.BoxGeometry(0.75, 0.18, 0.04), M.wood, 0, 0.33, -0.11),
+    mesh(new THREE.BoxGeometry(0.05, 0.2, 0.2), M.dark, -0.32, 0.1),
+    mesh(new THREE.BoxGeometry(0.05, 0.2, 0.2), M.dark, 0.32, 0.1),
   ],
   tower: () => [
     mesh(new THREE.CylinderGeometry(0.3, 0.35, 1.2, 8), M.stoneLight, 0, 0.6),
@@ -162,12 +166,14 @@ const prototypes = new Map<PieceKind, THREE.Group>();
  */
 export function installModelLibrary(library: ModelLibrary): void {
   for (const [kind, model] of library.models) prototypes.set(kind, model);
-  installConnectorMaterials(library.materials);
+  installConnectorKit(library.materials, library.connectorParts);
 }
 
 export function createPieceModel(kind: PieceKind): THREE.Group {
-  // Fences and paths depend on their neighbours; this is the stand-alone look.
-  if (isConnective(kind)) return createConnectedModel(kind, 0, 0);
+  // Connective pieces depend on their neighbours; this is the stand-alone look.
+  if (isConnective(kind)) return createConnectedModel(kind, () => undefined, 0);
+  // Built fresh each time: its animation is a function, which clones would drop.
+  if (kind === 'fireflies') return createFireflies();
   let proto = prototypes.get(kind);
   if (!proto) {
     proto = new THREE.Group();

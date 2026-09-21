@@ -6,6 +6,7 @@ import { resetReconnectBackoff, scheduleReconnect } from './net/reconnect';
 import { loadPieceModels } from './scene/modelLibrary';
 import { installModelLibrary } from './scene/pieceModels';
 import { setUpLandscape } from './ui/orientation';
+import { EnvironmentControls } from './ui/settings';
 import { createWorld } from './scene/world';
 
 const MODEL_TIMEOUT_MS = 8000;
@@ -33,6 +34,7 @@ function setStatus(status: ConnectionStatus, text: string): void {
 }
 
 const world = createWorld(document.getElementById('app')!);
+new EnvironmentControls((settings) => world.setEnvironment(settings));
 let game: Game | null = null;
 world.start((dt) => {
   if (game) game.update(dt);

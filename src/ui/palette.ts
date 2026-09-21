@@ -1,4 +1,5 @@
 import {
+  PIECE_CATEGORIES,
   PIECE_KINDS,
   PIECE_LABELS,
   type PieceKind,
@@ -16,11 +17,17 @@ const ICONS: Record<PieceKind, string> = {
   well: '⛲',
   lamp: '💡',
   tower: '🏰',
+  water: '💧',
+  tile: '⬜',
+  bridge: '🌉',
+  grass: '🌿',
+  fireflies: '✨',
+  bench: '🪑',
 };
 
-/** Hotkey for the n-th piece: 1–9, then 0. */
-export function hotkeyFor(index: number): string {
-  return String((index + 1) % 10);
+/** Hotkey for the n-th piece in PIECE_KINDS: 1–9, then 0; later pieces have none. */
+export function hotkeyFor(index: number): string | null {
+  return index < 10 ? String((index + 1) % 10) : null;
 }
 
 export interface PaletteTools {
@@ -52,6 +59,7 @@ export class Palette {
   private readonly buttons = new Map<PieceKind, HTMLButtonElement>();
   private readonly removeButton: HTMLButtonElement | null = null;
   private readonly toggle: HTMLButtonElement;
+  private readonly groupOf = new Map<PieceKind, HTMLElement>();
 
   constructor(onSelect: (kind: PieceKind) => void, tools?: PaletteTools) {
     this.toggle = document.createElement('button');
@@ -71,19 +79,53 @@ export class Palette {
         this.removeButton,
       );
     }
-    PIECE_KINDS.forEach((kind, i) => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.title = `${PIECE_LABELS[kind]} (${hotkeyFor(i)})`;
-      button.innerHTML = `<span class="icon">${ICONS[kind]}</span><span class="label">${PIECE_LABELS[kind]}</span><kbd>${hotkeyFor(i)}</kbd>`;
-      button.classList.add('piece');
-      button.addEventListener('click', () => {
-        onSelect(kind);
-        if (COMPACT.matches) this.setCollapsed(true);
-      });
-      this.buttons.set(kind, button);
-      this.root.append(button);
+    // One section per category. Sections fold into a single button; opening one
+    // closes the others, so only one row of pieces is ever on screen.
+    for (const category of PIECE_CATEGORIES) {
+      const group = document.createElement('div');
+      group.className = 'group';
+      const head = document.createElement('button');
+      head.type = 'button';
+      head.className = 'group-head';
+      head.innerHTML = `<span class="icon">${ICONS[category.kinds[0]]}</span><span class="label">${category.name}</span>`;
+      head.addEventListener('click', () =>
+        this.openGroup(group.classList.contains('open') ? null : group),
+      );
+      const row = document.createElement('div');
+      row.className = 'row';
+      for (const kind of category.kinds) {
+        row.append(this.pieceButton(kind, onSelect));
+        this.groupOf.set(kind, group);
+      }
+      group.append(head, row);
+      this.root.append(group);
+    }
+  }
+
+  private openGroup(open: HTMLElement | null): void {
+    for (const group of this.root.querySelectorAll('.group')) {
+      group.classList.toggle('open', group === open);
+    }
+  }
+
+  private pieceButton(
+    kind: PieceKind,
+    onSelect: (kind: PieceKind) => void,
+  ): HTMLButtonElement {
+    const hotkey = hotkeyFor(PIECE_KINDS.indexOf(kind));
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.title = hotkey
+      ? `${PIECE_LABELS[kind]} (${hotkey})`
+      : PIECE_LABELS[kind];
+    button.innerHTML = `<span class="icon">${ICONS[kind]}</span><span class="label">${PIECE_LABELS[kind]}</span>${hotkey ? `<kbd>${hotkey}</kbd>` : ''}`;
+    button.classList.add('piece');
+    button.addEventListener('click', () => {
+      onSelect(kind);
+      if (COMPACT.matches) this.setCollapsed(true);
     });
+    this.buttons.set(kind, button);
+    return button;
   }
 
   private get collapsed(): boolean {
@@ -98,6 +140,7 @@ export class Palette {
   setSelected(kind: PieceKind): void {
     for (const [k, button] of this.buttons)
       button.classList.toggle('selected', k === kind);
+    this.openGroup(this.groupOf.get(kind) ?? null);
     this.toggle.innerHTML = `<span class="icon">${ICONS[kind]}</span><span class="label">${PIECE_LABELS[kind]}</span>`;
   }
 

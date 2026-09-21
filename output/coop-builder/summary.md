@@ -1,0 +1,140 @@
+# Coop Builder: Implementation Summary
+
+**Prepared by:** Coop Builder Agent
+**Date:** 2026-10-04
+**Status:** Partially complete. All planned features are built, tested and deployed. Two checks still need real hardware: phones, and 10 human players on separate devices at once.
+
+## 1. Overview
+Coop Builder is a low-poly 3D multiplayer building game for up to 10 players, built for the MHacks "Best use of Spacetime" track. SpacetimeDB is the entire backend:
+- **Tables** hold every player, piece, round, vote and result.
+- **Reducers** make every change, inside server-validated transactions.
+- **Scheduled reducers** drive the round clock.
+- **An event table** feeds the activity stream.
+- **Clients render only from live subscriptions.**
+
+Each round is picked by a live lobby vote:
+- **Co-op Challenge:** four preset target lists, scored by the server, with an early-finish time bonus.
+- **Build Battle:** a popular theme or a player-submitted idea. Each builder gets a personal plot, then everyone votes for the best build.
+
+The web client (TypeScript, Three.js, Kenney CC0 models) runs on laptops and on phones held sideways. It has 16 piece kinds in four palette sections (Buildings, Greenery, Furniture, Environment). Fences, paths, water and bridges link up with their neighbours. Each player picks their own time of day and fog, and clouds cast moving shadows. The module is on Maincloud's free tier, and the client is on GitHub Pages.
+
+- **Play:** https://arinb44.github.io/SpacetimeDemoMHacks/
+- **Database dashboard:** https://spacetimedb.com/coop-builder-mhacks
+
+## 2. Requirements Checklist
+| # | Requirement | Status | Note |
+|---|---|---|---|
+| 1 | All shared state in SpacetimeDB; changes only through reducers | Done | 13 tables; the client never mutates state locally |
+| 2 | Join with a nickname and color; identity survives reload | Done | Token per server and database; `?slot=N` for several players in one browser |
+| 3 | Live movement, interpolated, validated by the server | Done | Token-bucket speed limit plus island bounds; prediction with snap-back |
+| 4 | Place, rotate and remove with server rules and feedback | Done | Shared rules in `logic/pieces.ts`; toasts on rejection |
+| 5 | Same-tile race produces exactly one winner | Done | Unique `tile_key`; sync test with 8 clients |
+| 6 | Rounds driven by scheduled reducers; clients agree on the countdown | Done | One-shot `phase_timer`; stale timers ignored; server-clock offset on clients |
+| 7 | Co-op challenges, live progress, server score, results | Done | 4 challenges; early completion and time bonus; contributions |
+| 8 | Feed and effects from an event table | Done | `activity` event table drives the feed and placement puffs |
+| 9 | 10 concurrent players without visible lag | Partial | 10 bots on Maincloud for 60 s: 0 errors, round trip p50 29 ms / p95 32 ms. Not yet tried with 10 real devices |
+| 10 | Laptops and phones (landscape) | Partial | Laptops verified. Phones verified in emulation only (joystick, tap to build, Turn/Remove, rotate card, collapsible palette); not yet on a real phone |
+| 11 | Reconnect keeps identity and current state | Done | Sync test; automatic reload with backoff verified by restarting the server |
+| 12 | Maincloud free tier plus a public URL; no paid services | Done | `coop-builder-mhacks` and GitHub Pages |
+| 13 | Consistent low-poly look | Done | Kenney models, sky, clouds with shadows, waves, decorated beach, confetti; connected fences, paths, water and bridges; personal day/dusk/night with stars and glowing lamps and fireflies; fog |
+| 14 | Unit and sync tests pass | Done | 75 passing (59 unit, 16 sync) |
+| 15 | README: setup, run, deploy, join, credits | Done | Also covers architecture, admin controls and the demo script |
+| 16 | Lobby theme vote and player ideas | Done | Live tally, one idea per player, random tie-break |
+| 17 | Build Battle with plots and voting | Done | 3×3 plots of 8×8; the idea's author hosts; no self-votes |
+
+## 3. Changes Made
+New project in `spacetime-market\`, built on the repo's existing README and LICENSE.
+- **Server module (`spacetimedb/src/`):**
+  - `schema.ts`: tables.
+  - `rounds.ts`: the phase machine, round choice, plots, scoring and tally.
+  - `index.ts`: reducers, lifecycle hooks, admin controls.
+  - `logic/`: pure shared rules (`grid`, `movement`, `players`, `pieces`, `challenges`, `scoring`, `phases`, `themes`, `plots`).
+- **Client (`src/`):**
+  - `game/`: game wiring, local player prediction, builder.
+  - `scene/`: world with environment presets, avatars, pieces, model library, connected models (fences, paths, water, tiles, bridges), glow (lamps, fireflies), plots, effects.
+  - `input/`: keyboard, pointer, touch joystick.
+  - `net/`: connection, server clock, queries, reconnect.
+  - `ui/`: HUD, lobby ballot, battle voting, results, sectioned palette, environment settings, feed, toast, join screen, orientation, layout.
+  - `module_bindings/`: generated by `spacetime generate`.
+- **Assets:** `public/assets/models/`: 23 Kenney CC0 GLB models, a colormap texture and the license files (430 KB).
+- **Tests:** `tests/unit/` (6 files) and `tests/sync/` (5 files plus setup and helpers).
+- **Tooling:** `scripts/spacetime.mjs` (CLI wrapper), `scripts/bots.ts` (load testing), `.github/workflows/pages.yml`, `.env.development` / `.env.production`, Vite, Vitest and Prettier config.
+- **Docs:** `README.md`, plus `output/coop-builder/` (agent definition, plan revisions 1–3, decisions, progress, this summary).
+
+## 4. How to Use / Run
+- **Play:** open the Pages URL, enter a name, and walk with WASD or the joystick. Place pieces with the palette (1–0) and click or tap a tile; right-click or Remove deletes. Vote in the lobby and press Start.
+- **Local development:**
+  ```bash
+  npm install
+  cd spacetimedb && npm install && cd ..
+  npm run stdb:start            # local SpacetimeDB on port 3000
+  npm run stdb:publish:local
+  npm run dev                   # http://localhost:5173
+  ```
+- **Deploy:** `spacetime login`, then `npm run stdb:publish` (Maincloud). Every push to `main` redeploys Pages.
+- **Admin (publisher identity):** `spacetime call coop-builder-mhacks skip_phase | reset_game | configure_timing <lobby> <build> <scoring> <voting> <results>`.
+- **Load test:** `npm run bots -- --count 10 --target maincloud --seconds 60`.
+- **Demo script:** see the README.
+
+## 5. Testing
+- **Command:** `npm test` (unit plus sync; the sync tests need `npm run stdb:start`).
+- **Final results:** 75 passed, 0 failed (59 unit, 16 sync).
+- **Covered:**
+  - Every pure rule: grid, movement and speed limit, naming and colors, placement and battle rules, challenges and scoring, timing, theme tally, plots.
+  - Multi-client sync on real SDK clients: join and move convergence, teleport clamping, two tabs on one identity, reconnect, the same-tile race, simultaneous placements, rotate and remove, event delivery, rejected actions, timed rounds, early completion, admin permissions, theme vote, a full battle round.
+- **Not covered by automated tests:** rendering and HUD behavior, and touch input. These were checked manually in the browser (desktop and emulated phone), not on real devices.
+- **Load:** 10 bots against Maincloud with clean logs.
+
+## 6. Commits
+| Hash | Message |
+|---|---|
+| `807d92e` | chore: scaffold SpacetimeDB module and Three.js client |
+| `8cf2d7d` | feat: add live player presence and synced movement |
+| `103355a` | feat: add shared building with server-validated placement |
+| `dfeaf30` | feat: add timed co-op rounds driven by scheduled reducers |
+| `7c80c3f` | feat: add lobby theme vote, player ideas, and Build Battle mode |
+| `0cc6ead` | chore: add GitHub Pages deploy, Maincloud config, and load-test bots |
+| `bebfd79` | feat: polish visuals with Kenney low-poly models and scene effects |
+| `d452336` | feat: add landscape phone support with touch controls |
+| `aa1f820` | feat: join fences and paths with neighbours; auto-reconnect |
+| *(pending)* | feat: add environment effects, new pieces, and sectioned palette |
+
+All are on `main` at https://github.com/arinb44/SpacetimeDemoMHacks, authored as `arinb44`, with no AI markers. The commit for this last round (environment, new pieces, demo script, this summary) is pending approval.
+
+## 7. Decision Log
+Full log: `decisions.md`.
+- **Game and stack:**
+  - A co-op builder in low-poly 3D, with timed challenges, prefab pieces and walking avatars.
+  - A TypeScript module (switched from C++ to cut toolchain risk), on Maincloud's free tier.
+  - Plain TypeScript + Three.js + Vite on the client.
+  - Client prediction with server validation for movement.
+  - Objective co-op scoring; the board clears each round.
+  - Kenney CC0 assets; GitHub Pages hosting; anyone can start a round, with a 30 s auto-start.
+- **Scope changes you requested:**
+  - Lobby theme vote with player ideas.
+  - Build Battle with plots and everyone voting.
+  - Phones dropped, then restored, then made landscape-only.
+  - Collapsible piece palette.
+  - Connected fences and paths.
+  - Environment: personal day/dusk/night and fog, cloud shadows, water, stone tiles, bridges, grass, fireflies, bench.
+  - Palette subheadings with sections that fold one at a time.
+  - Seamless water squares (corner filling).
+- **Operations:**
+  - Commits authored as the repo-local identity `arinb44`.
+  - Planning docs committed.
+  - Local databases wiped after the Maincloud login replaced the old local identity.
+
+## 8. Known Issues & Next Steps
+- **Real-device checks are still needed:**
+  - Phones: landscape, joystick, tap to build, and fullscreen/orientation lock on Android (iOS can't lock).
+  - A session with about 10 real players.
+- **Maincloud free tier:** databases pause when idle (open the site early), and energy use can only be seen on the dashboard (the CLI has no energy command).
+- **Generated typings:** they show unique indexes as range indexes. `src/net/queries.ts#pieceAt` works around this. Regenerating bindings after a SpacetimeDB upgrade may fix it.
+- **Moderation:** player ideas are cleaned up and length-limited, with no profanity filter. Use the admin `reset_game` if needed.
+- **Live database:** pieces from the bot load test are still on the board. Run `reset_game` before the demo, as in the README.
+- **Possible follow-ups:**
+  - A QR code on the lobby screen for joining.
+  - Spectator camera controls.
+  - Sound effects.
+  - A camera tour of each plot during battle voting.
+  - Code-splitting the 660 KB client bundle.

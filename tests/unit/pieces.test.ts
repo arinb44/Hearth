@@ -7,6 +7,7 @@ import {
   checkModify,
   checkPlacement,
   isPieceKind,
+  PIECE_CATEGORIES,
   PIECE_KINDS,
   PIECE_LABELS,
   SERVER_REACH_SLACK,
@@ -31,6 +32,32 @@ describe('catalog', () => {
       expect(isPieceKind(kind)).toBe(true);
     }
     expect(isPieceKind('castle')).toBe(false);
+  });
+
+  it('puts every kind in exactly one palette category', () => {
+    const grouped = PIECE_CATEGORIES.flatMap((c) => c.kinds);
+    expect([...grouped].sort()).toEqual([...PIECE_KINDS].sort());
+    expect(PIECE_CATEGORIES.map((c) => c.name)).toEqual([
+      'Buildings',
+      'Greenery',
+      'Furniture',
+      'Environment',
+    ]);
+  });
+
+  it('keeps the original ten kinds first, so their hotkeys never change', () => {
+    expect(PIECE_KINDS.slice(0, 10)).toEqual([
+      'house',
+      'tree',
+      'pine',
+      'rock',
+      'path',
+      'flowers',
+      'fence',
+      'well',
+      'lamp',
+      'tower',
+    ]);
   });
 
   it('has a message for every error', () => {

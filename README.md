@@ -63,7 +63,11 @@ bindings, then republish.
 ## Controls
 
 - **WASD / arrow keys**: walk
-- **1–0**: pick a piece · **R / Q**: turn it
+- **1–0**: pick one of the first ten pieces · **R / Q**: turn it
+- **Palette**: pieces are grouped into Buildings, Greenery, Furniture, and Environment;
+  each section folds into one button and opens one at a time
+- **☀️ / 🌫️ (top right)**: your own time of day (Day, Dusk, Night) and fog; saved on
+  your device, not shared
 - **Click**: place (or rotate an existing piece) · **Right-click**: remove
 - You can build within the white ring around your avatar.
 
@@ -99,10 +103,43 @@ spacetime call coop-builder-mhacks configure_timing 30 120 4 25 12
 #                        lobby build scoring voting results (seconds; lobby 0 = no auto-start)
 ```
 
+## Demo script (judging)
+
+**Before judges arrive**
+
+1. Open https://arinb44.github.io/SpacetimeDemoMHacks/ about 2 minutes early. The
+   free-tier database pauses when idle, and the first connection wakes it.
+2. Optional clean slate: `spacetime call coop-builder-mhacks reset_game`.
+3. Optional shorter rounds for a tight slot:
+   `spacetime call coop-builder-mhacks configure_timing 20 60 3 20 8`.
+4. Put the game on the projector from a laptop. Judges join on their own phones
+   (held sideways) or laptops with the same URL.
+
+**What to show (about 4 minutes)**
+
+1. **Live lobby**: everyone joins; names, colors, and the online list update for
+   all players instantly (subscriptions). A judge types an idea ("Pirate Cove"),
+   and it appears on every ballot; votes and voter dots update live.
+2. **Co-op round**: start a challenge such as Cozy Village. Everyone builds; the
+   checklist ticks up live from the shared board. Finish early to show the time
+   bonus. The countdown comes from a **scheduled reducer**, not from any client.
+3. **Server-side rules**: two people click the same tile at the same moment, and
+   exactly one piece appears (a unique column, enforced in one transaction).
+   Building out of reach or after time is up is rejected by the server.
+4. **Build Battle**: vote for the judge's idea. Each builder gets a plot, the judge
+   hosts, everyone votes (not for themselves), and the winner is tallied
+   server-side.
+5. **Resilience**: refresh a phone mid-round. It reconnects as the same player
+   (saved identity token) and sees the current board.
+
+**If something goes wrong**: `skip_phase` ends the current phase, and `reset_game`
+returns to an empty lobby (see _Admin controls_).
+
 ## Credits
 
 - 3D models: [Kenney](https://www.kenney.nl) — Nature Kit 2.1 and Fantasy Town Kit 2.0,
   CC0 (public domain). The license files are in `public/assets/models/*/License.txt`.
-  Houses and towers are assembled in code from the kit's wall and roof pieces.
+  Houses and towers are assembled in code from the kit's wall and roof pieces;
+  bridges, lily pads, grass tufts, and the bench are kit models too.
 - Everything else (avatars, sky, water, effects) is generated in code with Three.js.
 - If the models can't load, the game falls back to built-in procedural models.

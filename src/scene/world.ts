@@ -2,6 +2,14 @@ import * as THREE from 'three';
 import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { GRID_SIZE, TILE_SIZE } from '../../spacetimedb/src/logic/grid';
 import { IS_TOUCH } from '../input/touch';
+import { setNightLevel } from './glow';
+
+export type TimeOfDay = 'day' | 'dusk' | 'night';
+export type FogLevel = 'off' | 'light' | 'heavy';
+export interface EnvironmentSettings {
+  time: TimeOfDay;
+  fog: FogLevel;
+}
 
 export interface World {
   scene: THREE.Scene;
@@ -9,6 +17,8 @@ export interface World {
   renderer: THREE.WebGLRenderer;
   /** Eases the camera toward following `target`, or the island overview when null. */
   follow(target: THREE.Vector3 | null, dt: number): void;
+  /** Personal look: time of day and fog (nothing here is shared with other players). */
+  setEnvironment(settings: EnvironmentSettings): void;
   start(onFrame: (dt: number) => void): void;
 }
 
@@ -132,7 +142,11 @@ function createWater(): { mesh: THREE.Mesh; animate(time: number): void } {
 }
 
 /** A few puffy low-poly clouds drifting across the sky and wrapping around. */
-function createClouds(): { group: THREE.Group; animate(dt: number): void } {
+function createClouds(): {
+  group: THREE.Group;
+  material: THREE.MeshStandardMaterial;
+  animate(dt: number): void;
+} {
   const group = new THREE.Group();
   const material = new THREE.MeshStandardMaterial({
     color: COLORS.cloud,
@@ -149,11 +163,15 @@ function createClouds(): { group: THREE.Group; animate(dt: number): void } {
     [65, 36, -5],
     [-70, 33, 10],
     [20, 37, -85],
+    // Two lower clouds drift right over the island, so their shadows sweep across it.
+    [-30, 30, 2],
+    [15, 31, -11],
   ];
   for (const [x, y, z] of layout) {
     const cloud = new THREE.Group();
     for (let i = 0; i < 4; i++) {
       const p = new THREE.Mesh(puff, material);
+      p.castShadow = true;
       p.position.set(i * 2.8 - 4, Math.sin(i * 1.7) * 0.8, (i % 2) * 1.6);
       p.scale.setScalar(2.6 + ((i * 7) % 3) * 0.7);
       cloud.add(p);
@@ -163,6 +181,7 @@ function createClouds(): { group: THREE.Group; animate(dt: number): void } {
   }
   return {
     group,
+    material,
     animate(dt) {
       for (const cloud of group.children) {
         cloud.position.x += dt * 0.6;
@@ -172,11 +191,16 @@ function createClouds(): { group: THREE.Group; animate(dt: number): void } {
   };
 }
 
-function addLights(scene: THREE.Scene): void {
-  scene.add(new THREE.HemisphereLight('#e6f6ff', '#5d7f4c', 1.3));
+function addLights(scene: THREE.Scene): {
+  hemi: THREE.HemisphereLight;
+  sun: THREE.DirectionalLight;
+} {
+  const hemi = new THREE.HemisphereLight('#e6f6ff', '#5d7f4c', 1.3);
+  scene.add(hemi);
 
   const sun = new THREE.DirectionalLight('#fff1d6', 2.4);
-  sun.position.set(14, 22, 9);
+  // Far out along the same direction, so the high clouds sit between it and the island.
+  sun.position.set(28, 44, 18);
   sun.castShadow = true;
   sun.shadow.mapSize.setScalar(LOW_POWER ? 1024 : 2048);
   const extent = BEACH_HALF + 2;
@@ -186,10 +210,108 @@ function addLights(scene: THREE.Scene): void {
     top: extent,
     bottom: -extent,
     near: 1,
-    far: 70,
+    far: 120,
   });
   scene.add(sun);
+  return { hemi, sun };
 }
+
+/** A dome of stars, shown at dusk and night. */
+function createStars(): THREE.Points {
+  const positions: number[] = [];
+  for (let i = 0; i < 700; i++) {
+    const theta = Math.random() * Math.PI * 2;
+    const y = 0.08 + Math.random() * 0.92;
+    const r = Math.sqrt(1 - y * y);
+    positions.push(
+      Math.cos(theta) * r * 250,
+      y * 250,
+      Math.sin(theta) * r * 250,
+    );
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute(
+    'position',
+    new THREE.Float32BufferAttribute(positions, 3),
+  );
+  return new THREE.Points(
+    geometry,
+    new THREE.PointsMaterial({
+      color: '#ffffff',
+      size: 1.6,
+      sizeAttenuation: false,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      fog: false,
+    }),
+  );
+}
+
+const TIMES: Record<
+  TimeOfDay,
+  {
+    top: string;
+    horizon: string;
+    hemiSky: string;
+    hemiGround: string;
+    hemi: number;
+    sun: string;
+    sunIntensity: number;
+    water: string;
+    cloud: string;
+    stars: number;
+    night: number;
+  }
+> = {
+  day: {
+    top: '#6fc3ef',
+    horizon: '#dff3fb',
+    hemiSky: '#e6f6ff',
+    hemiGround: '#5d7f4c',
+    hemi: 1.3,
+    sun: '#fff1d6',
+    sunIntensity: 2.4,
+    water: '#4fc0dd',
+    cloud: '#ffffff',
+    stars: 0,
+    night: 0,
+  },
+  dusk: {
+    top: '#3d4f9a',
+    horizon: '#ffb47a',
+    hemiSky: '#ffd2b0',
+    hemiGround: '#4a4060',
+    hemi: 0.85,
+    sun: '#ffa060',
+    sunIntensity: 1.5,
+    water: '#3f86b5',
+    cloud: '#ffd0b8',
+    stars: 0.35,
+    night: 0.55,
+  },
+  night: {
+    top: '#081028',
+    horizon: '#22345c',
+    hemiSky: '#7389c8',
+    hemiGround: '#1a2232',
+    hemi: 0.45,
+    sun: '#a8bcff',
+    sunIntensity: 0.7,
+    water: '#1f4c78',
+    cloud: '#56607a',
+    stars: 1,
+    night: 1,
+  },
+};
+
+/** Linear fog [near, far] per level, measured from the camera (about 15.6 from the
+ * avatar), so even heavy fog keeps your own surroundings visible. Off keeps a haze. */
+const FOGS: Record<FogLevel, [number, number]> = {
+  off: [60, 180],
+  light: [16, 60],
+  heavy: [9, 30],
+};
 
 export function createWorld(container: HTMLElement): World {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -202,7 +324,8 @@ export function createWorld(container: HTMLElement): World {
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(COLORS.horizon, 50, 140);
+  const fog = new THREE.Fog(COLORS.horizon, ...FOGS.off);
+  scene.fog = fog;
 
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 600);
   camera.position.copy(OVERVIEW_POSITION);
@@ -217,8 +340,10 @@ export function createWorld(container: HTMLElement): World {
   const water = createWater();
   const clouds = createClouds();
   const sky = createSky();
+  const stars = createStars();
+  sky.add(stars);
   scene.add(sky, createIsland(), water.mesh, clouds.group);
-  addLights(scene);
+  const { hemi, sun } = addLights(scene);
 
   // On portrait screens the camera pulls back so the build area still fits across.
   let followOffset = FOLLOW_OFFSET.clone();
@@ -243,6 +368,23 @@ export function createWorld(container: HTMLElement): World {
     scene,
     camera,
     renderer,
+    setEnvironment({ time, fog: fogLevel }) {
+      const t = TIMES[time];
+      const uniforms = (sky.material as THREE.ShaderMaterial).uniforms;
+      uniforms.top.value.set(t.top);
+      uniforms.horizon.value.set(t.horizon);
+      hemi.color.set(t.hemiSky);
+      hemi.groundColor.set(t.hemiGround);
+      hemi.intensity = t.hemi;
+      sun.color.set(t.sun);
+      sun.intensity = t.sunIntensity;
+      (water.mesh.material as THREE.MeshStandardMaterial).color.set(t.water);
+      clouds.material.color.set(t.cloud);
+      (stars.material as THREE.PointsMaterial).opacity = t.stars;
+      fog.color.set(t.horizon);
+      [fog.near, fog.far] = FOGS[fogLevel];
+      setNightLevel(t.night);
+    },
     follow(target, dt) {
       if (target) {
         desiredLookAt.copy(target);

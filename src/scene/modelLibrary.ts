@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type { PieceKind } from '../../spacetimedb/src/logic/pieces';
+import { createLampGlow } from './glow';
 import { GRASS_COLOR } from './world';
 
 // Kenney CC0 models (Nature Kit 2.1, Fantasy Town Kit 2.0), see public/assets/models.
@@ -23,6 +24,10 @@ const FILES = {
   stoneWindow: 'town/wall-window-stone.glb',
   roof: 'town/roof-point.glb',
   roofHigh: 'town/roof-high-point.glb',
+  lily: 'nature/lily_large.glb',
+  grassLarge: 'nature/grass_large.glb',
+  grassSmall: 'nature/grass.glb',
+  bench: 'town/stall-bench.glb',
 } as const;
 
 type Parts = Record<keyof typeof FILES, THREE.Object3D>;
@@ -72,7 +77,9 @@ function stack(...objects: THREE.Object3D[]): THREE.Group {
   return group;
 }
 
-const ASSEMBLE: Record<PieceKind, (p: Parts) => THREE.Group> = {
+// Connective kinds (fence, path, water, tile, bridge) are drawn by connectedModels.ts
+// and fireflies by glow.ts, so they have no entry here.
+const ASSEMBLE: Partial<Record<PieceKind, (p: Parts) => THREE.Group>> = {
   house: (p) => {
     const roof = p.roof.clone();
     roof.position.y = 1;
@@ -123,13 +130,39 @@ const ASSEMBLE: Record<PieceKind, (p: Parts) => THREE.Group> = {
   },
   fence: (p) => fit(p.fence.clone(), 1),
   well: (p) => fit(p.fountain.clone(), 0.9),
-  lamp: (p) => fit(p.lantern.clone(), 0.9, 1.2),
+  lamp: (p) => {
+    const lamp = fit(p.lantern.clone(), 0.9, 1.2);
+    lamp.add(createLampGlow(1.05));
+    return lamp;
+  },
+  grass: (p) => {
+    const tufts = new THREE.Group();
+    const spots: [number, number, boolean][] = [
+      [-0.2, -0.18, true],
+      [0.2, -0.05, true],
+      [-0.05, 0.22, true],
+      [0.24, 0.26, false],
+      [-0.28, 0.12, false],
+    ];
+    for (const [x, z, large] of spots) {
+      const tuft = fit(
+        (large ? p.grassLarge : p.grassSmall).clone(),
+        large ? 0.42 : 0.28,
+      );
+      tuft.position.set(x, 0, z);
+      tufts.add(tuft);
+    }
+    return tufts;
+  },
+  bench: (p) => fit(p.bench.clone(), 0.85),
 };
 
 export interface ModelLibrary {
   models: Map<PieceKind, THREE.Group>;
   /** Kit materials by name (wood, woodDark, dirt, dirtDark) for the connected pieces. */
   materials: Map<string, THREE.Material>;
+  /** Kit parts reused by the connected pieces. */
+  connectorParts: { lily: THREE.Object3D };
 }
 
 function collectMaterials(
@@ -191,5 +224,6 @@ export async function loadPieceModels(): Promise<ModelLibrary> {
   return {
     models: library,
     materials: collectMaterials(parts.fence, parts.path),
+    connectorParts: { lily: fit(parts.lily.clone(), 0.22) },
   };
 }

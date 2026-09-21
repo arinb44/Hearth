@@ -9,11 +9,7 @@ import {
   type PieceKind,
 } from '../../spacetimedb/src/logic/pieces';
 import type { Piece } from '../module_bindings/types';
-import {
-  createConnectedModel,
-  isConnective,
-  NEIGHBOURS,
-} from './connectedModels';
+import { createConnectedModel, isConnective } from './connectedModels';
 import { createPieceModel } from './pieceModels';
 
 const POP_SECONDS = 0.35;
@@ -33,12 +29,13 @@ interface Placed {
 }
 
 /**
- * Renders the `piece` table: one model per row, keyed by tile. Fences and paths are
- * drawn from their neighbourhood, so placing or removing one also redraws its
- * same-kind neighbours.
+ * Renders the `piece` table: one model per row, keyed by tile. Connective pieces
+ * (fences, paths, water, tiles, bridges) are drawn from their neighbourhood, so
+ * placing or removing one also redraws its neighbours.
  */
 export class PieceLayer {
   private readonly placed = new Map<number, Placed>();
+  private time = 0;
 
   constructor(private readonly scene: THREE.Scene) {}
 
@@ -71,7 +68,9 @@ export class PieceLayer {
   }
 
   update(dt: number): void {
+    this.time += dt;
     for (const entry of this.placed.values()) {
+      entry.object.userData.animate?.(this.time);
       if (entry.age >= POP_SECONDS) continue;
       entry.age = Math.min(entry.age + dt, POP_SECONDS);
       entry.object.scale.setScalar(
@@ -84,25 +83,16 @@ export class PieceLayer {
     return inBounds(x, z) ? this.placed.get(tileKey(x, z)) : undefined;
   }
 
-  /** Same-kind neighbours as NEIGHBOURS bits. */
-  private maskFor(entry: Placed): number {
-    let mask = 0;
-    for (const n of NEIGHBOURS) {
-      if (
-        this.at(entry.tileX + n.dx, entry.tileZ + n.dz)?.kind === entry.kind
-      ) {
-        mask |= n.bit;
-      }
-    }
-    return mask;
-  }
-
   /** (Re)builds an entry's model in place, keeping its pop-in progress. */
   private draw(entry: Placed): void {
     const kind = entry.kind;
     // Connected models are built in world directions, so only the others rotate.
     const object = isConnective(kind)
-      ? createConnectedModel(kind, this.maskFor(entry), entry.rotation)
+      ? createConnectedModel(
+          kind,
+          (dx, dz) => this.at(entry.tileX + dx, entry.tileZ + dz)?.kind,
+          entry.rotation,
+        )
       : createPieceModel(kind);
     if (!isConnective(kind)) object.rotation.y = (entry.rotation * Math.PI) / 2;
     object.position.set(tileToWorld(entry.tileX), 0, tileToWorld(entry.tileZ));
@@ -113,10 +103,13 @@ export class PieceLayer {
     this.scene.add(object);
   }
 
+  /** All eight surrounding tiles: water and paths also fill corners from diagonals. */
   private redrawNeighbours(x: number, z: number): void {
-    for (const n of NEIGHBOURS) {
-      const neighbour = this.at(x + n.dx, z + n.dz);
-      if (neighbour && isConnective(neighbour.kind)) this.draw(neighbour);
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        const neighbour = dx || dz ? this.at(x + dx, z + dz) : undefined;
+        if (neighbour && isConnective(neighbour.kind)) this.draw(neighbour);
+      }
     }
   }
 }
