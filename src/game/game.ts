@@ -13,7 +13,7 @@ import type { World } from '../scene/world';
 import { ServerClock } from '../net/clock';
 import { ActivityFeed } from '../ui/feed';
 import { RoundHud } from '../ui/hud';
-import { JoinScreen } from '../ui/join';
+import { HomeScreen } from '../ui/home';
 import { PlayerList } from '../ui/players';
 import { playerCss } from '../ui/colors';
 import { ResultsView } from '../ui/results';
@@ -32,7 +32,7 @@ export class Game {
   private readonly keyboard = new KeyboardMovement();
   private readonly joystick = new TouchJoystick();
   private readonly playerList = new PlayerList();
-  private readonly joinScreen: JoinScreen;
+  private readonly home: HomeScreen;
   private readonly pieces: PieceLayer;
   private readonly builder: Builder;
   private readonly feed = new ActivityFeed();
@@ -42,6 +42,7 @@ export class Game {
   private readonly plots: PlotLayer;
   private readonly toast = new Toast();
   private readonly effects: Effects;
+  private readonly menuButton = document.getElementById('menu-button')!;
   private readonly myHex: string;
   private readonly followTarget = new THREE.Vector3();
   private local: LocalPlayer | null = null;
@@ -52,9 +53,12 @@ export class Game {
     identity: Identity,
   ) {
     this.myHex = identity.toHexString();
-    this.joinScreen = new JoinScreen(async (name) => {
-      await conn.reducers.join({ name });
+    // The main screen comes first; Play enters the island under your username.
+    this.home = new HomeScreen(conn, this.myHex, this.toast, async () => {
+      await conn.reducers.join({ name: '' });
+      this.showHome(false);
     });
+    this.menuButton.addEventListener('click', () => this.showHome(true));
     this.pieces = new PieceLayer(world.scene);
     this.plots = new PlotLayer(world.scene);
     this.effects = new Effects(world.scene);
@@ -131,8 +135,7 @@ export class Game {
     });
     for (const row of conn.db.player.iter()) this.onPlayer(row);
 
-    // Returning players (stored token) are already in the table and skip the prompt.
-    if (!this.local) this.joinScreen.show();
+    this.showHome(true);
     this.refreshList();
   }
 
@@ -185,7 +188,6 @@ export class Game {
         avatar.setTarget(row.x, row.z, row.heading);
       } else if (!this.local) {
         this.local = new LocalPlayer(this.conn, row);
-        this.joinScreen.hide();
         this.builder.setEnabled(true);
       } else {
         this.local.reconcile(row);
@@ -203,6 +205,12 @@ export class Game {
   private removeAvatar(hex: string): void {
     this.avatars.get(hex)?.dispose();
     this.avatars.delete(hex);
+  }
+
+  private showHome(visible: boolean): void {
+    if (visible) this.home.show();
+    else this.home.hide();
+    this.menuButton.hidden = visible;
   }
 
   private refreshRound(): void {

@@ -23,6 +23,7 @@ import {
   presetOptionKeys,
   tallyVotes,
 } from './logic/themes';
+import { addStats } from './accounts';
 import type { Ctx } from './schema';
 
 type PhaseTag = 'Lobby' | 'Building' | 'Scoring' | 'Voting' | 'Results';
@@ -38,6 +39,17 @@ export function requireTiming(ctx: Ctx): RoundTiming {
   const config = ctx.db.config.id.find(0);
   if (!config) throw new Error('config singleton is missing');
   return config;
+}
+
+/** Saved stats: everyone online played the round; `winners` also won it. */
+function creditRound(ctx: Ctx, winners: (who: Identity) => boolean): void {
+  for (const p of ctx.db.player.iter()) {
+    if (!p.online) continue;
+    addStats(ctx, p.identity, {
+      roundsPlayed: 1,
+      wins: winners(p.identity) ? 1 : 0,
+    });
+  }
 }
 
 function onlinePlayerCount(ctx: Ctx): number {
@@ -239,6 +251,7 @@ function finishBuilding(ctx: Ctx): void {
       )
     : 0;
   const score = scoreRound(evaluation, remaining);
+  creditRound(ctx, () => evaluation.complete);
   ctx.db.roundResult.insert({
     round: state.round,
     mode: state.mode,
@@ -270,6 +283,8 @@ function finishVoting(ctx: Ctx): void {
     }
   }
   const winners = plotWinners(tally);
+  const winningBuilders = plots.filter((p) => winners.includes(p.plotIndex));
+  creditRound(ctx, (who) => winningBuilders.some((p) => p.builder.equals(who)));
   const topVotes = Math.max(0, ...tally.values());
   const contributions = plots
     .map((p) => ({

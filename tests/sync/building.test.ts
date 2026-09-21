@@ -148,7 +148,9 @@ describe('building sync', () => {
 
     const events: string[] = [];
     watcher.conn.db.activity.onInsert((_ctx, e) => {
-      if (e.actorName === 'Rotator 0') events.push(`${e.kind}:${e.pieceKind}`);
+      // Only build events: Rotator 0's own "joined" event can arrive late.
+      if (e.actorName === 'Rotator 0' && e.kind !== 'joined')
+        events.push(`${e.kind}:${e.pieceKind}`);
     });
 
     await builder.conn.reducers.placePiece({

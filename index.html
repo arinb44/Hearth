@@ -56,20 +56,13 @@
           <button id="go-landscape" type="button">Play in landscape</button>
         </div>
       </div>
-      <div id="join" class="overlay" hidden>
-        <form class="card">
+      <button id="menu-button" type="button" hidden>☰ Menu</button>
+      <div id="home" class="overlay" hidden>
+        <div class="card home-card">
           <h1>Coop Builder</h1>
-          <p>Build together. Beat the clock.</p>
-          <input
-            name="name"
-            placeholder="Your name"
-            autocomplete="nickname"
-            enterkeyhint="go"
-          />
-          <button type="submit">Join the island</button>
-          <div class="join-error" role="alert"></div>
-          <small>Move with WASD or the arrow keys</small>
-        </form>
+          <p class="tagline">Build together. Beat the clock.</p>
+          <div class="home-body"></div>
+        </div>
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>

@@ -7,9 +7,12 @@ import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
 import ConfigureTimingReducer from "../configure_timing_reducer";
+import CreateAccountReducer from "../create_account_reducer";
 import JoinReducer from "../join_reducer";
 import MoveReducer from "../move_reducer";
+import NewRecoveryCodeReducer from "../new_recovery_code_reducer";
 import PlacePieceReducer from "../place_piece_reducer";
+import RecoverAccountReducer from "../recover_account_reducer";
 import RemovePieceReducer from "../remove_piece_reducer";
 import ResetGameReducer from "../reset_game_reducer";
 import RotatePieceReducer from "../rotate_piece_reducer";
@@ -21,9 +24,12 @@ import VotePlotReducer from "../vote_plot_reducer";
 import VoteThemeReducer from "../vote_theme_reducer";
 
 export type ConfigureTimingParams = __Infer<typeof ConfigureTimingReducer>;
+export type CreateAccountParams = __Infer<typeof CreateAccountReducer>;
 export type JoinParams = __Infer<typeof JoinReducer>;
 export type MoveParams = __Infer<typeof MoveReducer>;
+export type NewRecoveryCodeParams = __Infer<typeof NewRecoveryCodeReducer>;
 export type PlacePieceParams = __Infer<typeof PlacePieceReducer>;
+export type RecoverAccountParams = __Infer<typeof RecoverAccountReducer>;
 export type RemovePieceParams = __Infer<typeof RemovePieceReducer>;
 export type ResetGameParams = __Infer<typeof ResetGameReducer>;
 export type RotatePieceParams = __Infer<typeof RotatePieceReducer>;

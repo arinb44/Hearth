@@ -177,6 +177,32 @@ const plotVote = table(
   },
 );
 
+// Accounts: a unique username bound to the owner's identity, plus saved stats.
+export const account = table(
+  { name: 'account', public: true },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    owner: t.identity().unique(),
+    username: t.string(),
+    usernameKey: t.string().unique(),
+    colorIndex: t.u8(),
+    roundsPlayed: t.u32(),
+    wins: t.u32(),
+    piecesPlaced: t.u32(),
+    createdAt: t.timestamp(),
+  },
+);
+
+// Private: each account's current recovery code. Only its owner sees it, through
+// the `my_recovery_code` view.
+export const accountSecret = table(
+  { name: 'account_secret' },
+  {
+    accountId: t.u64().primaryKey(),
+    recoveryCode: t.string().unique(),
+  },
+);
+
 export const spacetimedb = schema({
   gameState,
   config,
@@ -191,6 +217,8 @@ export const spacetimedb = schema({
   themeVote,
   plot,
   plotVote,
+  account,
+  accountSecret,
 });
 
 export type Ctx = ReducerCtx<InferSchema<typeof spacetimedb>>;

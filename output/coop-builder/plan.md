@@ -229,3 +229,54 @@ I'll ask about these with options and a recommendation. D1, D2, D5, D6 and D7 sh
 
 ---
 **Status:** Revision 1 approved on 2026-10-04 (D1–D8 per recommendations). **Revision 2 approved on 2026-10-04.** **Revision 4 (2026-10-04, user requests):** environment effects (personal day/dusk/night and fog, cloud shadows, stars, glow), six new pieces (Water, Stone Tile, Bridge, Grass, Fireflies, Bench), categorized palette with collapsible sections, and connected fences/paths/water. **Revision 3 (2026-10-04, chosen by the user):** phone support restored (requirement 10, M5 back after M6); M6 uses Kenney CC0 packs (D5). It adds a lobby theme vote, player ideas and Build Battle (requirements 16–17, M3b; D10–D11), and drops phone support (requirement 10, M5 removed; D12).
+
+---
+
+## Revision 5 (2026-10-04): Main screen, accounts, friends, islands, saved data
+
+**Request:** a main screen where you can make an account, add friends, join them, and have your data saved.
+**Choices made:** username plus recovery code; multiple islands; save the profile and stats, the friends list, and saved builds.
+
+### Requirements
+18. **Accounts.** From the main screen a player claims a unique username (case-insensitive) tied to their SpacetimeDB identity, and is shown a one-time **recovery code**.
+    - Entering that code on another device moves the account to that device's identity. The code is then replaced, so each code works once.
+    - No passwords and no outside services.
+19. **Profile and stats.** Username, color, rounds played, wins and pieces placed are stored in the database and shown on the main screen.
+20. **Islands.** Any account can create its own island, and players are on at most one island at a time.
+    - Each island has its own board, rounds, lobby vote, ideas, battle plots and results. Everything from requirements 1–17 now applies per island.
+    - Clients subscribe only to their island's rows.
+21. **Friends.** Send a request by username, then accept or decline it. Friends are listed with online status and the island they're on, with a **Join** button.
+    - Friend data is visible only to the two people involved (a client visibility filter).
+22. **Saved builds.** Save a snapshot of an island's board to your account. An island's host can load a saved build into their island while it's in the Lobby.
+23. **Navigation.** The main screen is shown before entering an island, and a Menu button in the game returns to it.
+
+### Technical approach
+- **New tables:**
+  - `account`: owner identity, username, username key (both unique), color, stats.
+  - `account_secret` (private): the recovery code.
+  - `island`, `friend_request`, `friendship`, `saved_build` (the pieces stored as an array).
+- **Per-island data:** every per-world table gets an `island_id`.
+  - `game_state` is keyed by island.
+  - `piece.cell_key = island_id × 1000 + tile_key` stays **unique**, so the database still guarantees one piece per tile on each island.
+  - Timers, results, ideas, votes, plots and activity events carry `island_id`.
+  - Reducers look up the caller's island from their `player` row.
+- **Recovery code delivery:** the code reaches its owner through a **per-user view** (`my_account_secret`), so other clients never see it.
+- **Visibility filters** keep friend data limited to the two people involved.
+- **Client:**
+  - The main screen (profile, recovery code, friends and requests, islands, saved builds) and the island screen (today's game).
+  - Subscriptions are filtered by island and swapped when changing islands.
+- **Tests:** each sync test creates its own island, which also isolates tests from each other. New sync tests cover the account and recovery flow, friend requests, joining a friend's island, saved builds, and confirming that two islands never see each other's pieces.
+
+### Milestones
+| # | Milestone | Ends with | Est. |
+|---|---|---|---|
+| **M8a** | Accounts: tables, recovery code view, claim on a new device, stats, main-screen shell | Unit + sync tests for accounts | 1 h |
+| **M8b** | Islands: the per-island refactor of every table, reducer, subscription and test; create, enter and leave | All existing tests pass per island, plus an isolation test | 1.5–2 h |
+| **M8c** | Friends and saved builds: requests, list, join; save and load builds; main-screen UI | Sync tests for friends, join and builds; browser check | 1.5 h |
+
+### Risks
+- **Breaking schema change:** publishing to Maincloud needs `--delete-data`, which wipes the live database (currently only test and bot data). I'll ask before doing it.
+- **Recovery codes are the only credential.** Lose the code and the browser token, and the account is gone. Codes are stored in a private table that only the module owner can read.
+- **The multi-island refactor touches most of the code.** The existing 75 tests are the safety net.
+
+**Status:** Revision 5 approved on 2026-10-04.

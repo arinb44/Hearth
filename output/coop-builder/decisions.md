@@ -43,3 +43,7 @@
 | 2026-10-04 | — | Environment effects + new pieces + menu subheadings | (user request) | Personal Day/Dusk/Night and fog (Off/Light/Heavy), saved per device; cloud shadows; stars; lamp halos and fireflies glow at night. New pieces: Water, Stone Tile, Bridge, Grass, Fireflies, Bench, grouped by fit: Buildings (House, Tower, Well, Bridge), Greenery (Tree, Pine, Flowers, Grass), Furniture (Fence, Lamp, Bench), Environment (Path, Stone Tile, Water, Rock, Fireflies) |
 | 2026-10-04 | — | Collapse each palette section | (user request) | Accordion: each section folds into one button; one open at a time; the section of the current piece opens |
 | 2026-10-04 | — | Water squares not merging | (user report) | Fill the corner between two arms when the diagonal tile connects too (water banks and paths); redraw all 8 neighbours |
+| 2026-10-04 | — | Ship the environment round before accounts | Ship now / hold | Ship now (recommendation): Maincloud republish + commit `7a2e862` |
+| 2026-10-04 | — | Accounts | Username + recovery code / SpacetimeAuth / password | Username + recovery code (recommendation) |
+| 2026-10-04 | — | Joining friends | Multiple islands / one shared island | Multiple islands (recommendation) |
+| 2026-10-04 | — | Saved data | Profile & stats / friends / saved builds / last island | Profile & stats, friends list, saved builds |

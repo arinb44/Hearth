@@ -35,9 +35,12 @@ import {
 
 // Import all reducer arg schemas
 import ConfigureTimingReducer from "./configure_timing_reducer";
+import CreateAccountReducer from "./create_account_reducer";
 import JoinReducer from "./join_reducer";
 import MoveReducer from "./move_reducer";
+import NewRecoveryCodeReducer from "./new_recovery_code_reducer";
 import PlacePieceReducer from "./place_piece_reducer";
+import RecoverAccountReducer from "./recover_account_reducer";
 import RemovePieceReducer from "./remove_piece_reducer";
 import ResetGameReducer from "./reset_game_reducer";
 import RotatePieceReducer from "./rotate_piece_reducer";
@@ -51,10 +54,12 @@ import VoteThemeReducer from "./vote_theme_reducer";
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import AccountRow from "./account_table";
 import ActivityRow from "./activity_table";
 import ConfigRow from "./config_table";
 import GameStateRow from "./game_state_table";
 import IdeaRow from "./idea_table";
+import MyRecoveryCodeRow from "./my_recovery_code_table";
 import PieceRow from "./piece_table";
 import PlayerRow from "./player_table";
 import PlotRow from "./plot_table";
@@ -66,6 +71,25 @@ import ThemeVoteRow from "./theme_vote_table";
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  account: __table({
+    name: 'account',
+    indexes: [
+      { accessor: 'id', name: 'account_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'owner', name: 'account_owner_idx_btree', algorithm: 'btree', columns: [
+        'owner',
+      ] },
+      { accessor: 'usernameKey', name: 'account_username_key_idx_btree', algorithm: 'btree', columns: [
+        'usernameKey',
+      ] },
+    ],
+    constraints: [
+      { name: 'account_id_key', constraint: 'unique', columns: ['id'] },
+      { name: 'account_owner_key', constraint: 'unique', columns: ['owner'] },
+      { name: 'account_username_key_key', constraint: 'unique', columns: ['usernameKey'] },
+    ],
+  }, AccountRow),
   activity: __table({
     name: 'activity',
     indexes: [
@@ -188,14 +212,24 @@ const tablesSchema = __schema({
       { name: 'theme_vote_voter_key', constraint: 'unique', columns: ['voter'] },
     ],
   }, ThemeVoteRow),
+  myRecoveryCode: __table({
+    name: 'my_recovery_code',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyRecoveryCodeRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
   __reducerSchema("configure_timing", ConfigureTimingReducer),
+  __reducerSchema("create_account", CreateAccountReducer),
   __reducerSchema("join", JoinReducer),
   __reducerSchema("move", MoveReducer),
+  __reducerSchema("new_recovery_code", NewRecoveryCodeReducer),
   __reducerSchema("place_piece", PlacePieceReducer),
+  __reducerSchema("recover_account", RecoverAccountReducer),
   __reducerSchema("remove_piece", RemovePieceReducer),
   __reducerSchema("reset_game", ResetGameReducer),
   __reducerSchema("rotate_piece", RotatePieceReducer),

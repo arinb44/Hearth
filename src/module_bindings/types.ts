@@ -10,6 +10,25 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const Account = __t.object("Account", {
+  id: __t.u64(),
+  owner: __t.identity(),
+  username: __t.string(),
+  usernameKey: __t.string(),
+  colorIndex: __t.u8(),
+  roundsPlayed: __t.u32(),
+  wins: __t.u32(),
+  piecesPlaced: __t.u32(),
+  createdAt: __t.timestamp(),
+});
+export type Account = __Infer<typeof Account>;
+
+export const AccountSecret = __t.object("AccountSecret", {
+  accountId: __t.u64(),
+  recoveryCode: __t.string(),
+});
+export type AccountSecret = __Infer<typeof AccountSecret>;
+
 export const Activity = __t.object("Activity", {
   kind: __t.string(),
   actorName: __t.string(),
@@ -76,6 +95,9 @@ export const Mode = __t.enum("Mode", {
   Battle: __t.unit(),
 });
 export type Mode = __Infer<typeof Mode>;
+
+export const MyRecoveryCode = __t.object("MyRecoveryCode", {});
+export type MyRecoveryCode = __Infer<typeof MyRecoveryCode>;
 
 // The tagged union or sum type for the algebraic type `Phase`.
 export const Phase = __t.enum("Phase", {

@@ -50,6 +50,8 @@ export function connect(events: ConnectionEvents): DbConnection {
           tables.config,
           tables.roundResult,
           tables.player,
+          tables.account,
+          tables.myRecoveryCode,
           tables.piece,
           tables.activity,
           tables.idea,

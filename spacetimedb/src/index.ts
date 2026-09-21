@@ -10,7 +10,19 @@ import {
   SERVER_REACH_SLACK,
   type BuildError,
 } from './logic/pieces';
-import { pickColorIndex, sanitizeName } from './logic/players';
+import { PLAYER_COLORS, pickColorIndex, sanitizeName } from './logic/players';
+import {
+  normalizeRecoveryCode,
+  parseUsername,
+  USERNAME_MAX,
+  USERNAME_MIN,
+} from './logic/accounts';
+import {
+  accountOf,
+  addStats,
+  issueRecoveryCode,
+  requireAccount,
+} from './accounts';
 import {
   optionKey,
   parseOptionKey,
@@ -27,7 +39,7 @@ import {
   requireGameState,
   resetToLobby,
 } from './rounds';
-import { phaseTimer, spacetimedb, type Ctx } from './schema';
+import { accountSecret, phaseTimer, spacetimedb, type Ctx } from './schema';
 
 export default spacetimedb;
 
@@ -133,7 +145,8 @@ export const onDisconnect = spacetimedb.clientDisconnected((ctx) => {
 export const join = spacetimedb.reducer(
   { name: t.string() },
   (ctx, { name }) => {
-    const clean = requireName(name);
+    // Players with an account always appear under their username.
+    const clean = accountOf(ctx, ctx.sender)?.username ?? requireName(name);
     const existing = ctx.db.player.identity.find(ctx.sender);
     if (existing) {
       ctx.db.player.identity.update({ ...existing, name: clean, online: true });
@@ -222,6 +235,7 @@ export const placePiece = spacetimedb.reducer(
       round: state.round,
     });
     logActivity(ctx, me, 'placed', kind, tileX, tileZ);
+    addStats(ctx, ctx.sender, { piecesPlaced: 1 });
     checkEarlyCompletion(ctx);
   },
 );
@@ -374,5 +388,83 @@ export const votePlot = spacetimedb.reducer(
     const existing = ctx.db.plotVote.voter.find(ctx.sender);
     if (existing) ctx.db.plotVote.voter.update({ ...existing, plotIndex });
     else ctx.db.plotVote.insert({ voter: ctx.sender, plotIndex });
+  },
+);
+
+/** Claims a unique username for this identity and issues its first recovery code. */
+export const createAccount = spacetimedb.reducer(
+  { username: t.string() },
+  (ctx, { username }) => {
+    if (accountOf(ctx, ctx.sender)) {
+      throw new SenderError('This device already has an account');
+    }
+    const name = parseUsername(username);
+    if (!name) {
+      throw new SenderError(
+        'Usernames are ' +
+          USERNAME_MIN +
+          '–' +
+          USERNAME_MAX +
+          ' letters, numbers, spaces, _ or -',
+      );
+    }
+    if (ctx.db.account.usernameKey.find(name.key)) {
+      throw new SenderError('That username is taken');
+    }
+    const created = ctx.db.account.insert({
+      id: 0n,
+      owner: ctx.sender,
+      username: name.display,
+      usernameKey: name.key,
+      colorIndex: ctx.random.integerInRange(0, PLAYER_COLORS.length - 1),
+      roundsPlayed: 0,
+      wins: 0,
+      piecesPlaced: 0,
+      createdAt: ctx.timestamp,
+    });
+    issueRecoveryCode(ctx, created.id);
+    const playing = ctx.db.player.identity.find(ctx.sender);
+    if (playing)
+      ctx.db.player.identity.update({ ...playing, name: name.display });
+  },
+);
+
+/**
+ * Signs this device in to an existing account: the account moves to this identity
+ * and the code is replaced, so each recovery code works once.
+ */
+export const recoverAccount = spacetimedb.reducer(
+  { code: t.string() },
+  (ctx, { code }) => {
+    const normalized = normalizeRecoveryCode(code);
+    if (!normalized) throw new SenderError('That is not a recovery code');
+    const secret = ctx.db.accountSecret.recoveryCode.find(normalized);
+    if (!secret) throw new SenderError('Unknown recovery code');
+    const current = accountOf(ctx, ctx.sender);
+    if (current && current.id !== secret.accountId) {
+      throw new SenderError(
+        'This device is already signed in as ' + current.username,
+      );
+    }
+    const recovered = ctx.db.account.id.find(secret.accountId)!;
+    ctx.db.account.id.update({ ...recovered, owner: ctx.sender });
+    issueRecoveryCode(ctx, recovered.id);
+  },
+);
+
+/** Replaces your recovery code (if the old one may have leaked). */
+export const newRecoveryCode = spacetimedb.reducer((ctx) => {
+  issueRecoveryCode(ctx, requireAccount(ctx).id);
+});
+
+/** Your own recovery code; every other client sees nothing here. */
+export const myRecoveryCode = spacetimedb.view(
+  { name: 'my_recovery_code', public: true },
+  t.option(accountSecret.rowType),
+  (ctx) => {
+    const mine = ctx.db.account.owner.find(ctx.sender);
+    return mine
+      ? (ctx.db.accountSecret.accountId.find(mine.id) ?? undefined)
+      : undefined;
   },
 );
