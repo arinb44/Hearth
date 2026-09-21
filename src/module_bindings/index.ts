@@ -36,7 +36,9 @@ import {
 // Import all reducer arg schemas
 import ConfigureTimingReducer from "./configure_timing_reducer";
 import CreateAccountReducer from "./create_account_reducer";
-import JoinReducer from "./join_reducer";
+import CreateIslandReducer from "./create_island_reducer";
+import EnterIslandReducer from "./enter_island_reducer";
+import LeaveIslandReducer from "./leave_island_reducer";
 import MoveReducer from "./move_reducer";
 import NewRecoveryCodeReducer from "./new_recovery_code_reducer";
 import PlacePieceReducer from "./place_piece_reducer";
@@ -59,6 +61,7 @@ import ActivityRow from "./activity_table";
 import ConfigRow from "./config_table";
 import GameStateRow from "./game_state_table";
 import IdeaRow from "./idea_table";
+import IslandRow from "./island_table";
 import MyRecoveryCodeRow from "./my_recovery_code_table";
 import PieceRow from "./piece_table";
 import PlayerRow from "./player_table";
@@ -112,12 +115,12 @@ const tablesSchema = __schema({
   gameState: __table({
     name: 'game_state',
     indexes: [
-      { accessor: 'id', name: 'game_state_id_idx_btree', algorithm: 'btree', columns: [
-        'id',
+      { accessor: 'islandId', name: 'game_state_island_id_idx_btree', algorithm: 'btree', columns: [
+        'islandId',
       ] },
     ],
     constraints: [
-      { name: 'game_state_id_key', constraint: 'unique', columns: ['id'] },
+      { name: 'game_state_island_id_key', constraint: 'unique', columns: ['islandId'] },
     ],
   }, GameStateRow),
   idea: __table({
@@ -129,28 +132,48 @@ const tablesSchema = __schema({
       { accessor: 'id', name: 'idea_id_idx_btree', algorithm: 'btree', columns: [
         'id',
       ] },
+      { accessor: 'islandId', name: 'idea_island_id_idx_btree', algorithm: 'btree', columns: [
+        'islandId',
+      ] },
     ],
     constraints: [
       { name: 'idea_author_key', constraint: 'unique', columns: ['author'] },
       { name: 'idea_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, IdeaRow),
+  island: __table({
+    name: 'island',
+    indexes: [
+      { accessor: 'id', name: 'island_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'ownerAccountId', name: 'island_owner_account_id_idx_btree', algorithm: 'btree', columns: [
+        'ownerAccountId',
+      ] },
+    ],
+    constraints: [
+      { name: 'island_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, IslandRow),
   piece: __table({
     name: 'piece',
     indexes: [
+      { accessor: 'cellKey', name: 'piece_cell_key_idx_btree', algorithm: 'btree', columns: [
+        'cellKey',
+      ] },
       { accessor: 'id', name: 'piece_id_idx_btree', algorithm: 'btree', columns: [
         'id',
+      ] },
+      { accessor: 'islandId', name: 'piece_island_id_idx_btree', algorithm: 'btree', columns: [
+        'islandId',
       ] },
       { accessor: 'placedBy', name: 'piece_placed_by_idx_btree', algorithm: 'btree', columns: [
         'placedBy',
       ] },
-      { accessor: 'tileKey', name: 'piece_tile_key_idx_btree', algorithm: 'btree', columns: [
-        'tileKey',
-      ] },
     ],
     constraints: [
+      { name: 'piece_cell_key_key', constraint: 'unique', columns: ['cellKey'] },
       { name: 'piece_id_key', constraint: 'unique', columns: ['id'] },
-      { name: 'piece_tile_key_key', constraint: 'unique', columns: ['tileKey'] },
     ],
   }, PieceRow),
   player: __table({
@@ -158,6 +181,9 @@ const tablesSchema = __schema({
     indexes: [
       { accessor: 'identity', name: 'player_identity_idx_btree', algorithm: 'btree', columns: [
         'identity',
+      ] },
+      { accessor: 'islandId', name: 'player_island_id_idx_btree', algorithm: 'btree', columns: [
+        'islandId',
       ] },
     ],
     constraints: [
@@ -170,18 +196,27 @@ const tablesSchema = __schema({
       { accessor: 'builder', name: 'plot_builder_idx_btree', algorithm: 'btree', columns: [
         'builder',
       ] },
-      { accessor: 'plotIndex', name: 'plot_plot_index_idx_btree', algorithm: 'btree', columns: [
-        'plotIndex',
+      { accessor: 'id', name: 'plot_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'islandId', name: 'plot_island_id_idx_btree', algorithm: 'btree', columns: [
+        'islandId',
+      ] },
+      { accessor: 'plotKey', name: 'plot_plot_key_idx_btree', algorithm: 'btree', columns: [
+        'plotKey',
       ] },
     ],
     constraints: [
-      { name: 'plot_builder_key', constraint: 'unique', columns: ['builder'] },
-      { name: 'plot_plot_index_key', constraint: 'unique', columns: ['plotIndex'] },
+      { name: 'plot_id_key', constraint: 'unique', columns: ['id'] },
+      { name: 'plot_plot_key_key', constraint: 'unique', columns: ['plotKey'] },
     ],
   }, PlotRow),
   plotVote: __table({
     name: 'plot_vote',
     indexes: [
+      { accessor: 'islandId', name: 'plot_vote_island_id_idx_btree', algorithm: 'btree', columns: [
+        'islandId',
+      ] },
       { accessor: 'voter', name: 'plot_vote_voter_idx_btree', algorithm: 'btree', columns: [
         'voter',
       ] },
@@ -193,17 +228,23 @@ const tablesSchema = __schema({
   roundResult: __table({
     name: 'round_result',
     indexes: [
-      { accessor: 'round', name: 'round_result_round_idx_btree', algorithm: 'btree', columns: [
-        'round',
+      { accessor: 'id', name: 'round_result_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'islandId', name: 'round_result_island_id_idx_btree', algorithm: 'btree', columns: [
+        'islandId',
       ] },
     ],
     constraints: [
-      { name: 'round_result_round_key', constraint: 'unique', columns: ['round'] },
+      { name: 'round_result_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, RoundResultRow),
   themeVote: __table({
     name: 'theme_vote',
     indexes: [
+      { accessor: 'islandId', name: 'theme_vote_island_id_idx_btree', algorithm: 'btree', columns: [
+        'islandId',
+      ] },
       { accessor: 'voter', name: 'theme_vote_voter_idx_btree', algorithm: 'btree', columns: [
         'voter',
       ] },
@@ -225,7 +266,9 @@ const tablesSchema = __schema({
 const reducersSchema = __reducers(
   __reducerSchema("configure_timing", ConfigureTimingReducer),
   __reducerSchema("create_account", CreateAccountReducer),
-  __reducerSchema("join", JoinReducer),
+  __reducerSchema("create_island", CreateIslandReducer),
+  __reducerSchema("enter_island", EnterIslandReducer),
+  __reducerSchema("leave_island", LeaveIslandReducer),
   __reducerSchema("move", MoveReducer),
   __reducerSchema("new_recovery_code", NewRecoveryCodeReducer),
   __reducerSchema("place_piece", PlacePieceReducer),

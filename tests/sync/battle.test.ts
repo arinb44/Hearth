@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Identity } from 'spacetimedb';
 import type { DbConnection } from '../../src/module_bindings';
+import { resultFor } from '../../src/net/queries';
 import { worldToTile } from '../../spacetimedb/src/logic/grid';
 import { plotOrigin } from '../../spacetimedb/src/logic/plots';
 import { optionKey } from '../../spacetimedb/src/logic/themes';
@@ -8,18 +9,25 @@ import {
   adminCall,
   connectClients,
   disconnectAll,
+  enterAll,
+  newIsland,
   waitFor,
   type TestClient,
 } from './helpers';
 
-const state = (conn: DbConnection) => conn.db.gameState.id.find(0)!;
+let island = 0n;
+const state = (conn: DbConnection) => conn.db.gameState.islandId.find(island)!;
 const plotOf = (conn: DbConnection, who: Identity) =>
-  conn.db.plot.builder.find(who)?.plotIndex;
+  [...conn.db.plot.iter()].find(
+    (p) => p.islandId === island && p.builder.isEqual(who),
+  )?.plotIndex;
+const ideasHere = (conn: DbConnection) =>
+  [...conn.db.idea.iter()].filter((i) => i.islandId === island);
+const votesHere = (conn: DbConnection) =>
+  [...conn.db.themeVote.iter()].filter((v) => v.islandId === island);
 
 async function joinAll(clients: TestClient[], names: string[]): Promise<void> {
-  await Promise.all(
-    clients.map((c, i) => c.conn.reducers.join({ name: names[i] })),
-  );
+  await enterAll(clients, island, (i) => names[i]);
 }
 
 /** Submits an idea from `author`, has everyone vote for it, and starts the round. */
@@ -30,10 +38,10 @@ async function startIdeaBattle(
 ) {
   await author.conn.reducers.submitIdea({ text });
   await waitFor(
-    () => [...author.conn.db.idea.iter()].some((i) => i.text === text),
+    () => ideasHere(author.conn).some((i) => i.text === text),
     'idea row',
   );
-  const idea = [...author.conn.db.idea.iter()].find((i) => i.text === text)!;
+  const idea = ideasHere(author.conn).find((i) => i.text === text)!;
   await Promise.all(
     clients.map((c) =>
       c.conn.reducers.voteTheme({ option: optionKey('idea', idea.id) }),
@@ -50,11 +58,10 @@ async function startIdeaBattle(
 
 describe('theme vote and build battle', () => {
   const clients: TestClient[] = [];
-  beforeEach(() => adminCall('reset_game'));
-  afterEach(() => {
-    disconnectAll(clients);
-    adminCall('reset_game');
+  beforeEach(async () => {
+    island = await newIsland();
   });
+  afterEach(() => disconnectAll(clients));
 
   it('shows ideas and votes live, and starts the most-voted option', async () => {
     clients.push(...(await connectClients(3)));
@@ -64,11 +71,11 @@ describe('theme vote and build battle', () => {
     await ada.conn.reducers.submitIdea({ text: '  Pirate   Cove ' });
     for (const c of clients) {
       await waitFor(
-        () => [...c.conn.db.idea.iter()].some((i) => i.text === 'Pirate Cove'),
+        () => ideasHere(c.conn).some((i) => i.text === 'Pirate Cove'),
         'idea visible to everyone',
       );
     }
-    const idea = [...bob.conn.db.idea.iter()][0];
+    const idea = ideasHere(bob.conn)[0];
     expect(idea.authorName).toBe('Ada');
 
     await expect(
@@ -80,7 +87,7 @@ describe('theme vote and build battle', () => {
     await cy.conn.reducers.voteTheme({ option: 'battle:0' });
     for (const c of clients) {
       await waitFor(
-        () => c.conn.db.themeVote.count() === 3n,
+        () => votesHere(c.conn).length === 3,
         'three votes everywhere',
       );
     }
@@ -97,8 +104,7 @@ describe('theme vote and build battle', () => {
     expect(s.themeTitle).toBe('Pirate Cove');
     expect(s.host?.isEqual(ada.identity)).toBe(true);
     await waitFor(
-      () =>
-        cy.conn.db.idea.count() === 0n && cy.conn.db.themeVote.count() === 0n,
+      () => ideasHere(cy.conn).length === 0 && votesHere(cy.conn).length === 0,
       'idea consumed and votes cleared',
     );
     expect(plotOf(cy.conn, ada.identity)).toBeUndefined(); // the host does not build
@@ -152,7 +158,7 @@ describe('theme vote and build battle', () => {
       }),
     ).rejects.toThrow(/not building/);
 
-    adminCall('skip_phase');
+    adminCall('skip_phase', String(island));
     for (const c of clients) {
       await waitFor(() => state(c.conn).phase.tag === 'Voting', 'voting phase');
     }
@@ -166,14 +172,14 @@ describe('theme vote and build battle', () => {
     await b1.conn.reducers.votePlot({ plotIndex: plots[1] });
 
     const round = state(host.conn).round;
-    adminCall('skip_phase');
+    adminCall('skip_phase', String(island));
     for (const c of clients) {
       await waitFor(
-        () => c.conn.db.roundResult.round.find(round) !== null,
+        () => resultFor(c.conn, island, round) !== undefined,
         'battle result',
       );
     }
-    const result = b2.conn.db.roundResult.round.find(round)!;
+    const result = resultFor(b2.conn, island, round)!;
     expect(result.mode.tag).toBe('Battle');
     expect(result.themeTitle).toBe('Dragon Lair');
     expect(result.score).toBe(3);

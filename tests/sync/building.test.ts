@@ -8,9 +8,10 @@ import {
 } from '../../spacetimedb/src/logic/grid';
 import { PIECE_KINDS } from '../../spacetimedb/src/logic/pieces';
 import {
-  adminCall,
   connectClients,
   disconnectAll,
+  enterAll,
+  newIsland,
   waitFor,
   type TestClient,
 } from './helpers';
@@ -45,15 +46,14 @@ function distinctTilesUnderPlayers(
   });
 }
 
-async function joinAll(clients: TestClient[], prefix: string): Promise<void> {
-  await Promise.all(
-    clients.map((c, i) => c.conn.reducers.join({ name: `${prefix} ${i}` })),
-  );
-}
-
 describe('building sync', () => {
   const clients: TestClient[] = [];
-  beforeEach(() => adminCall('reset_game'));
+  let island = 0n;
+  const joinAll = (all: TestClient[], prefix: string) =>
+    enterAll(all, island, (i) => `${prefix} ${i}`);
+  beforeEach(async () => {
+    island = await newIsland();
+  });
   afterEach(() => disconnectAll(clients));
 
   it('lets exactly one of eight simultaneous placements on the same tile win', async () => {
@@ -80,23 +80,20 @@ describe('building sync', () => {
     const winnerKind = PIECE_KINDS[winners[0] % PIECE_KINDS.length];
     for (const viewer of clients) {
       await waitFor(
-        () => pieceAt(viewer.conn, contested) !== undefined,
+        () => pieceAt(viewer.conn, island, contested) !== undefined,
         'piece visible',
       );
-      const seen = pieceAt(viewer.conn, contested)!;
+      const seen = pieceAt(viewer.conn, island, contested)!;
       expect(seen.kind).toBe(winnerKind);
       expect(seen.placedBy.isEqual(clients[winners[0]].identity)).toBe(true);
       const onTile = [...viewer.conn.db.piece.iter()].filter(
-        (p) => p.tileX === contested.x && p.tileZ === contested.z,
+        (p) =>
+          p.islandId === island &&
+          p.tileX === contested.x &&
+          p.tileZ === contested.z,
       );
       expect(onTile).toHaveLength(1);
     }
-
-    // Clean up for later tests.
-    await clients[winners[0]].conn.reducers.removePiece({
-      tileX: 12,
-      tileZ: 12,
-    });
   });
 
   it('keeps every concurrent placement on distinct tiles, identically on all clients', async () => {
@@ -117,11 +114,11 @@ describe('building sync', () => {
 
     for (const viewer of clients) {
       await waitFor(
-        () => tiles.every((t) => pieceAt(viewer.conn, t) !== undefined),
+        () => tiles.every((t) => pieceAt(viewer.conn, island, t) !== undefined),
         'all eight pieces visible',
       );
       tiles.forEach((t, i) => {
-        const seen = pieceAt(viewer.conn, t)!;
+        const seen = pieceAt(viewer.conn, island, t)!;
         expect(seen.kind).toBe(PIECE_KINDS[i]);
         expect(seen.rotation).toBe(i % 4);
       });
@@ -134,7 +131,7 @@ describe('building sync', () => {
     );
     for (const viewer of clients) {
       await waitFor(
-        () => tiles.every((t) => pieceAt(viewer.conn, t) === undefined),
+        () => tiles.every((t) => pieceAt(viewer.conn, island, t) === undefined),
         'all pieces removed everywhere',
       );
     }
@@ -161,7 +158,7 @@ describe('building sync', () => {
     });
     await builder.conn.reducers.rotatePiece({ tileX: tile.x, tileZ: tile.z });
     await waitFor(
-      () => pieceAt(watcher.conn, tile)?.rotation === 0,
+      () => pieceAt(watcher.conn, island, tile)?.rotation === 0,
       'rotation wraps 3 → 0',
     );
 
@@ -180,7 +177,10 @@ describe('building sync', () => {
     const [builder] = clients;
     await joinAll(clients, 'Rule Tester');
     const [tile] = distinctTilesUnderPlayers([builder]);
-    const piecesBefore = builder.conn.db.piece.count();
+    const piecesHere = () =>
+      [...builder.conn.db.piece.iter()].filter((p) => p.islandId === island)
+        .length;
+    const piecesBefore = piecesHere();
 
     const attempts = [
       { kind: 'castle', tileX: tile.x, tileZ: tile.z, rotation: 0 },
@@ -194,6 +194,6 @@ describe('building sync', () => {
     await expect(
       builder.conn.reducers.removePiece({ tileX: tile.x, tileZ: tile.z }),
     ).rejects.toThrow();
-    expect(builder.conn.db.piece.count()).toBe(piecesBefore);
+    expect(piecesHere()).toBe(piecesBefore);
   });
 });

@@ -1,11 +1,15 @@
 import { PLAYER_COLORS } from '../../spacetimedb/src/logic/players';
 import type { Player } from '../module_bindings/types';
 
-/** Top-right list of online players, rebuilt from the client cache on change. */
+/** Top-right list of the island's online players, rebuilt from the client cache on change. */
 export class PlayerList {
   private readonly root = document.getElementById('players')!;
 
-  render(players: Iterable<Player>, myIdentityHex: string | undefined): void {
+  render(
+    players: Iterable<Player>,
+    myIdentityHex: string | undefined,
+    islandName = 'Builders',
+  ): void {
     const online = [...players]
       .filter((p) => p.online)
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -29,7 +33,13 @@ export class PlayerList {
     });
 
     const title = document.createElement('h2');
-    title.textContent = `Builders online · ${online.length}`;
+    // The island name is dropped on phones, where the panel only shows the count.
+    const name = document.createElement('span');
+    name.className = 'island-name';
+    name.textContent = `${islandName} ·`;
+    const count = document.createElement('span');
+    count.textContent = `${online.length} online`;
+    title.append(name, count);
     const list = document.createElement('ul');
     list.append(...items);
     this.root.replaceChildren(title, list);

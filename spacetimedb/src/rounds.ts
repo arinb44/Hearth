@@ -1,7 +1,8 @@
-// Round state machine. Every transition happens inside a reducer transaction, so all
-// clients see one consistent phase, theme, and countdown.
+// Round state machine, one per island. Every transition happens inside a reducer
+// transaction, so all clients on an island see one consistent phase, theme, and countdown.
 import { ScheduleAt, Timestamp, type Identity } from 'spacetimedb';
 import { CHALLENGES, challengeById } from './logic/challenges';
+import { NO_ISLAND, plotKey } from './logic/islands';
 import {
   secondsToMicros,
   remainingFraction,
@@ -29,9 +30,9 @@ import type { Ctx } from './schema';
 type PhaseTag = 'Lobby' | 'Building' | 'Scoring' | 'Voting' | 'Results';
 type GameStateRow = ReturnType<typeof requireGameState>;
 
-export function requireGameState(ctx: Ctx) {
-  const state = ctx.db.gameState.id.find(0);
-  if (!state) throw new Error('game_state singleton is missing');
+export function requireGameState(ctx: Ctx, islandId: bigint) {
+  const state = ctx.db.gameState.islandId.find(islandId);
+  if (!state) throw new Error('game_state is missing for island ' + islandId);
   return state;
 }
 
@@ -41,10 +42,17 @@ export function requireTiming(ctx: Ctx): RoundTiming {
   return config;
 }
 
-/** Saved stats: everyone online played the round; `winners` also won it. */
-function creditRound(ctx: Ctx, winners: (who: Identity) => boolean): void {
-  for (const p of ctx.db.player.iter()) {
-    if (!p.online) continue;
+function onlinePlayers(ctx: Ctx, islandId: bigint) {
+  return [...ctx.db.player.islandId.filter(islandId)].filter((p) => p.online);
+}
+
+/** Saved stats: everyone online on the island played the round; `winners` also won it. */
+function creditRound(
+  ctx: Ctx,
+  islandId: bigint,
+  winners: (who: Identity) => boolean,
+): void {
+  for (const p of onlinePlayers(ctx, islandId)) {
     addStats(ctx, p.identity, {
       roundsPlayed: 1,
       wins: winners(p.identity) ? 1 : 0,
@@ -52,26 +60,21 @@ function creditRound(ctx: Ctx, winners: (who: Identity) => boolean): void {
   }
 }
 
-function onlinePlayerCount(ctx: Ctx): number {
-  let count = 0;
-  for (const p of ctx.db.player.iter()) if (p.online) count++;
-  return count;
-}
-
-/** Moves to `phase`; with `seconds`, schedules the timer that will end it. */
+/** Moves the island to `phase`; with `seconds`, schedules the timer that will end it. */
 function setPhase(
   ctx: Ctx,
+  islandId: bigint,
   phase: PhaseTag,
   seconds: number | null,
   patch: Partial<GameStateRow> = {},
 ): void {
-  const state = { ...requireGameState(ctx), ...patch };
+  const state = { ...requireGameState(ctx, islandId), ...patch };
   const endsAt = seconds
     ? new Timestamp(
         ctx.timestamp.microsSinceUnixEpoch + secondsToMicros(seconds),
       )
     : undefined;
-  ctx.db.gameState.id.update({
+  ctx.db.gameState.islandId.update({
     ...state,
     phase: { tag: phase },
     phaseStartedAt: ctx.timestamp,
@@ -81,22 +84,25 @@ function setPhase(
     ctx.db.phaseTimer.insert({
       scheduledId: 0n,
       scheduledAt: ScheduleAt.time(endsAt.microsSinceUnixEpoch),
+      islandId,
       round: state.round,
       phase: { tag: phase },
     });
   }
 }
 
-/** A timer row is current only if it matches the live round, phase, and end time. */
+/** A timer row is current only if it matches its island's round, phase, and end time. */
 export function isCurrentTimer(
   ctx: Ctx,
   timer: {
+    islandId: bigint;
     round: number;
     phase: { tag: string };
     scheduledAt: { tag: string; value: unknown };
   },
 ): boolean {
-  const state = requireGameState(ctx);
+  const state = ctx.db.gameState.islandId.find(timer.islandId);
+  if (!state) return false;
   if (timer.round !== state.round || timer.phase.tag !== state.phase.tag)
     return false;
   if (timer.scheduledAt.tag !== 'Time' || !state.phaseEndsAt) return false;
@@ -104,14 +110,15 @@ export function isCurrentTimer(
   return firesAt === state.phaseEndsAt.microsSinceUnixEpoch;
 }
 
-/** Starts the lobby auto-start countdown if it is enabled, idle, and someone is here. */
-export function ensureLobbyTimer(ctx: Ctx): void {
-  const state = requireGameState(ctx);
+/** Starts the island's lobby countdown if it is enabled, idle, and someone is there. */
+export function ensureLobbyTimer(ctx: Ctx, islandId: bigint): void {
+  if (islandId === NO_ISLAND) return;
+  const state = requireGameState(ctx, islandId);
   const { lobbySeconds } = requireTiming(ctx);
   if (state.phase.tag !== 'Lobby' || state.phaseEndsAt || lobbySeconds === 0)
     return;
-  if (onlinePlayerCount(ctx) === 0) return;
-  setPhase(ctx, 'Lobby', lobbySeconds);
+  if (onlinePlayers(ctx, islandId).length === 0) return;
+  setPhase(ctx, islandId, 'Lobby', lobbySeconds);
 }
 
 interface RoundChoice {
@@ -121,12 +128,14 @@ interface RoundChoice {
   host: Identity | undefined;
 }
 
-/** Turns the lobby vote into the next round; no votes keeps the co-op rotation. */
-function chooseRound(ctx: Ctx): RoundChoice {
-  const state = requireGameState(ctx);
-  const ideas = [...ctx.db.idea.iter()];
+/** Turns the island's lobby vote into the next round; no votes keeps the co-op rotation. */
+function chooseRound(ctx: Ctx, islandId: bigint): RoundChoice {
+  const state = requireGameState(ctx, islandId);
+  const ideas = [...ctx.db.idea.islandId.filter(islandId)];
   const winner = pickWinner(
-    tallyVotes([...ctx.db.themeVote.iter()].map((v) => v.option)),
+    tallyVotes(
+      [...ctx.db.themeVote.islandId.filter(islandId)].map((v) => v.option),
+    ),
     [...presetOptionKeys(), ...ideas.map((i) => optionKey('idea', i.id))],
     () => ctx.random(),
   );
@@ -161,26 +170,36 @@ function chooseRound(ctx: Ctx): RoundChoice {
   };
 }
 
-function clearRoundTables(ctx: Ctx): void {
-  for (const p of [...ctx.db.piece.iter()]) ctx.db.piece.id.delete(p.id);
-  for (const v of [...ctx.db.themeVote.iter()]) {
+function clearRoundTables(ctx: Ctx, islandId: bigint): void {
+  for (const p of [...ctx.db.piece.islandId.filter(islandId)]) {
+    ctx.db.piece.id.delete(p.id);
+  }
+  for (const v of [...ctx.db.themeVote.islandId.filter(islandId)]) {
     ctx.db.themeVote.voter.delete(v.voter);
   }
-  for (const p of [...ctx.db.plot.iter()])
-    ctx.db.plot.builder.delete(p.builder);
-  for (const v of [...ctx.db.plotVote.iter()]) {
+  for (const p of [...ctx.db.plot.islandId.filter(islandId)]) {
+    ctx.db.plot.id.delete(p.id);
+  }
+  for (const v of [...ctx.db.plotVote.islandId.filter(islandId)]) {
     ctx.db.plotVote.voter.delete(v.voter);
   }
 }
 
 /** Gives each online builder (everyone but the host, up to 9) a plot and moves them there. */
-function assignPlots(ctx: Ctx, host: Identity | undefined): void {
-  const builders = [...ctx.db.player.iter()]
-    .filter((p) => p.online && !(host && p.identity.equals(host)))
+function assignPlots(
+  ctx: Ctx,
+  islandId: bigint,
+  host: Identity | undefined,
+): void {
+  const builders = onlinePlayers(ctx, islandId)
+    .filter((p) => !(host && p.identity.equals(host)))
     .slice(0, MAX_PLOTS);
   builders.forEach((p, i) => {
     const plotIndex = PLOT_ASSIGNMENT_ORDER[i];
     ctx.db.plot.insert({
+      id: 0n,
+      islandId,
+      plotKey: plotKey(islandId, plotIndex),
       builder: p.identity,
       plotIndex,
       builderName: p.name,
@@ -197,12 +216,12 @@ function assignPlots(ctx: Ctx, host: Identity | undefined): void {
   });
 }
 
-export function beginRound(ctx: Ctx): void {
-  const state = requireGameState(ctx);
-  const choice = chooseRound(ctx);
-  clearRoundTables(ctx);
-  if (choice.mode === 'Battle') assignPlots(ctx, choice.host);
-  setPhase(ctx, 'Building', requireTiming(ctx).buildSeconds, {
+export function beginRound(ctx: Ctx, islandId: bigint): void {
+  const state = requireGameState(ctx, islandId);
+  const choice = chooseRound(ctx, islandId);
+  clearRoundTables(ctx, islandId);
+  if (choice.mode === 'Battle') assignPlots(ctx, islandId, choice.host);
+  setPhase(ctx, islandId, 'Building', requireTiming(ctx).buildSeconds, {
     round: state.round + 1,
     mode: { tag: choice.mode },
     challengeId: choice.challengeId,
@@ -212,16 +231,19 @@ export function beginRound(ctx: Ctx): void {
   });
 }
 
-function coopContributions(ctx: Ctx) {
-  const pieces = new Map<string, number>();
-  for (const p of ctx.db.piece.iter()) {
+/** Pieces per builder on the island, named from their player row wherever they are now. */
+function coopContributions(ctx: Ctx, islandId: bigint) {
+  const pieces = new Map<string, { who: Identity; count: number }>();
+  for (const p of ctx.db.piece.islandId.filter(islandId)) {
     const key = p.placedBy.toHexString();
-    pieces.set(key, (pieces.get(key) ?? 0) + 1);
+    const entry = pieces.get(key) ?? { who: p.placedBy, count: 0 };
+    entry.count++;
+    pieces.set(key, entry);
   }
   const rows = [];
-  for (const p of ctx.db.player.iter()) {
-    const count = pieces.get(p.identity.toHexString());
-    if (count) {
+  for (const { who, count } of pieces.values()) {
+    const p = ctx.db.player.identity.find(who);
+    if (p) {
       rows.push({
         name: p.name,
         colorIndex: p.colorIndex,
@@ -234,14 +256,14 @@ function coopContributions(ctx: Ctx) {
 }
 
 /** Ends the Building phase: co-op rounds are scored, battle rounds move to voting. */
-function finishBuilding(ctx: Ctx): void {
-  const state = requireGameState(ctx);
+function finishBuilding(ctx: Ctx, islandId: bigint): void {
+  const state = requireGameState(ctx, islandId);
   const timing = requireTiming(ctx);
   if (state.mode.tag === 'Battle') {
-    setPhase(ctx, 'Voting', timing.votingSeconds);
+    setPhase(ctx, islandId, 'Voting', timing.votingSeconds);
     return;
   }
-  const board = [...ctx.db.piece.iter()];
+  const board = [...ctx.db.piece.islandId.filter(islandId)];
   const evaluation = evaluateChallenge(challengeById(state.challengeId), board);
   const remaining = state.phaseEndsAt
     ? remainingFraction(
@@ -251,8 +273,10 @@ function finishBuilding(ctx: Ctx): void {
       )
     : 0;
   const score = scoreRound(evaluation, remaining);
-  creditRound(ctx, () => evaluation.complete);
+  creditRound(ctx, islandId, () => evaluation.complete);
   ctx.db.roundResult.insert({
+    id: 0n,
+    islandId,
     round: state.round,
     mode: state.mode,
     themeTitle: state.themeTitle,
@@ -260,23 +284,25 @@ function finishBuilding(ctx: Ctx): void {
     score,
     completed: evaluation.complete,
     stars: starsFor(score),
-    contributions: coopContributions(ctx),
+    contributions: coopContributions(ctx, islandId),
     endedAt: ctx.timestamp,
   });
-  setPhase(ctx, 'Scoring', timing.scoringSeconds, { teamScore: score });
+  setPhase(ctx, islandId, 'Scoring', timing.scoringSeconds, {
+    teamScore: score,
+  });
 }
 
 /** Ends the Voting phase: tallies plot votes and records the battle result. */
-function finishVoting(ctx: Ctx): void {
-  const state = requireGameState(ctx);
-  const plots = [...ctx.db.plot.iter()];
+function finishVoting(ctx: Ctx, islandId: bigint): void {
+  const state = requireGameState(ctx, islandId);
+  const plots = [...ctx.db.plot.islandId.filter(islandId)];
   const tally = new Map<number, number>(plots.map((p) => [p.plotIndex, 0]));
-  for (const v of ctx.db.plotVote.iter()) {
+  for (const v of ctx.db.plotVote.islandId.filter(islandId)) {
     const current = tally.get(v.plotIndex);
     if (current !== undefined) tally.set(v.plotIndex, current + 1);
   }
   const piecesInPlot = new Map<number, number>();
-  for (const p of ctx.db.piece.iter()) {
+  for (const p of ctx.db.piece.islandId.filter(islandId)) {
     const index = plotOfTile({ x: p.tileX, z: p.tileZ });
     if (index !== null) {
       piecesInPlot.set(index, (piecesInPlot.get(index) ?? 0) + 1);
@@ -284,7 +310,9 @@ function finishVoting(ctx: Ctx): void {
   }
   const winners = plotWinners(tally);
   const winningBuilders = plots.filter((p) => winners.includes(p.plotIndex));
-  creditRound(ctx, (who) => winningBuilders.some((p) => p.builder.equals(who)));
+  creditRound(ctx, islandId, (who) =>
+    winningBuilders.some((p) => p.builder.equals(who)),
+  );
   const topVotes = Math.max(0, ...tally.values());
   const contributions = plots
     .map((p) => ({
@@ -295,6 +323,8 @@ function finishVoting(ctx: Ctx): void {
     }))
     .sort((a, b) => b.votes - a.votes || b.pieces - a.pieces);
   ctx.db.roundResult.insert({
+    id: 0n,
+    islandId,
     round: state.round,
     mode: state.mode,
     themeTitle: state.themeTitle,
@@ -305,62 +335,68 @@ function finishVoting(ctx: Ctx): void {
     contributions,
     endedAt: ctx.timestamp,
   });
-  setPhase(ctx, 'Results', requireTiming(ctx).resultsSeconds, {
+  setPhase(ctx, islandId, 'Results', requireTiming(ctx).resultsSeconds, {
     teamScore: topVotes,
   });
 }
 
 /** Called after every board change: a co-op round ends the moment it is complete. */
-export function checkEarlyCompletion(ctx: Ctx): void {
-  const state = requireGameState(ctx);
+export function checkEarlyCompletion(ctx: Ctx, islandId: bigint): void {
+  const state = requireGameState(ctx, islandId);
   if (state.phase.tag !== 'Building' || state.mode.tag !== 'Coop') return;
   const evaluation = evaluateChallenge(challengeById(state.challengeId), [
-    ...ctx.db.piece.iter(),
+    ...ctx.db.piece.islandId.filter(islandId),
   ]);
-  if (evaluation.complete) finishBuilding(ctx);
+  if (evaluation.complete) finishBuilding(ctx, islandId);
 }
 
 /** During a battle build: the player's plot, or null for host and spectators. */
 export function buildRestriction(
   ctx: Ctx,
+  islandId: bigint,
   who: Identity,
 ): number | null | undefined {
-  const state = requireGameState(ctx);
+  const state = requireGameState(ctx, islandId);
   if (state.mode.tag !== 'Battle' || state.phase.tag !== 'Building') {
     return undefined;
   }
-  return ctx.db.plot.builder.find(who)?.plotIndex ?? null;
+  for (const p of ctx.db.plot.builder.filter(who)) {
+    if (p.islandId === islandId) return p.plotIndex;
+  }
+  return null;
 }
 
-/** Admin reset: empty board, no ideas or votes, back to an idle lobby. */
-export function resetToLobby(ctx: Ctx): void {
-  clearRoundTables(ctx);
-  for (const i of [...ctx.db.idea.iter()]) ctx.db.idea.id.delete(i.id);
-  setPhase(ctx, 'Lobby', null, { teamScore: 0, host: undefined });
-  ensureLobbyTimer(ctx);
+/** Empty board, no ideas or votes, back to an idle lobby. */
+export function resetToLobby(ctx: Ctx, islandId: bigint): void {
+  clearRoundTables(ctx, islandId);
+  for (const i of [...ctx.db.idea.islandId.filter(islandId)]) {
+    ctx.db.idea.id.delete(i.id);
+  }
+  setPhase(ctx, islandId, 'Lobby', null, { teamScore: 0, host: undefined });
+  ensureLobbyTimer(ctx, islandId);
 }
 
 /** The phase transition table, used by the phase timer and the admin skip. */
-export function advance(ctx: Ctx): void {
-  const state = requireGameState(ctx);
+export function advance(ctx: Ctx, islandId: bigint): void {
+  const state = requireGameState(ctx, islandId);
   const timing = requireTiming(ctx);
   switch (state.phase.tag) {
     case 'Lobby':
-      if (onlinePlayerCount(ctx) > 0) beginRound(ctx);
-      else setPhase(ctx, 'Lobby', null);
+      if (onlinePlayers(ctx, islandId).length > 0) beginRound(ctx, islandId);
+      else setPhase(ctx, islandId, 'Lobby', null);
       break;
     case 'Building':
-      finishBuilding(ctx);
+      finishBuilding(ctx, islandId);
       break;
     case 'Scoring':
-      setPhase(ctx, 'Results', timing.resultsSeconds);
+      setPhase(ctx, islandId, 'Results', timing.resultsSeconds);
       break;
     case 'Voting':
-      finishVoting(ctx);
+      finishVoting(ctx, islandId);
       break;
     case 'Results':
-      setPhase(ctx, 'Lobby', null);
-      ensureLobbyTimer(ctx);
+      setPhase(ctx, islandId, 'Lobby', null);
+      ensureLobbyTimer(ctx, islandId);
       break;
   }
 }

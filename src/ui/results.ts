@@ -1,4 +1,5 @@
 import type { DbConnection } from '../module_bindings';
+import { resultFor } from '../net/queries';
 import type { RoundResult } from '../module_bindings/types';
 import { colorDot } from './colors';
 
@@ -21,9 +22,9 @@ export class ResultsView {
 
   constructor(private readonly conn: DbConnection) {}
 
-  /** Call when the phase changes. */
-  onPhase(phase: string, round: number): void {
-    const result = this.conn.db.roundResult.round.find(round);
+  /** Call when the island's phase changes. */
+  onPhase(phase: string, round: number, islandId: bigint): void {
+    const result = resultFor(this.conn, islandId, round);
     if (phase === 'Scoring') {
       this.showBanner(
         result?.completed ? 'Challenge complete! 🎉' : "Time's up!",
@@ -34,6 +35,13 @@ export class ResultsView {
     const show = phase === 'Results' && !!result;
     this.root.hidden = !show;
     if (show) this.renderResult(result);
+  }
+
+  /** Hides the banner and results card, when leaving an island. */
+  hide(): void {
+    window.clearTimeout(this.bannerTimer);
+    this.banner.hidden = true;
+    this.root.hidden = true;
   }
 
   private showBanner(text: string): void {

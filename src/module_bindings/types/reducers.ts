@@ -8,7 +8,9 @@ import { type Infer as __Infer } from "spacetimedb";
 // Import all reducer arg schemas
 import ConfigureTimingReducer from "../configure_timing_reducer";
 import CreateAccountReducer from "../create_account_reducer";
-import JoinReducer from "../join_reducer";
+import CreateIslandReducer from "../create_island_reducer";
+import EnterIslandReducer from "../enter_island_reducer";
+import LeaveIslandReducer from "../leave_island_reducer";
 import MoveReducer from "../move_reducer";
 import NewRecoveryCodeReducer from "../new_recovery_code_reducer";
 import PlacePieceReducer from "../place_piece_reducer";
@@ -25,7 +27,9 @@ import VoteThemeReducer from "../vote_theme_reducer";
 
 export type ConfigureTimingParams = __Infer<typeof ConfigureTimingReducer>;
 export type CreateAccountParams = __Infer<typeof CreateAccountReducer>;
-export type JoinParams = __Infer<typeof JoinReducer>;
+export type CreateIslandParams = __Infer<typeof CreateIslandReducer>;
+export type EnterIslandParams = __Infer<typeof EnterIslandReducer>;
+export type LeaveIslandParams = __Infer<typeof LeaveIslandReducer>;
 export type MoveParams = __Infer<typeof MoveReducer>;
 export type NewRecoveryCodeParams = __Infer<typeof NewRecoveryCodeReducer>;
 export type PlacePieceParams = __Infer<typeof PlacePieceReducer>;

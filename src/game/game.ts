@@ -1,16 +1,18 @@
 import * as THREE from 'three';
 import type { Identity } from 'spacetimedb';
+import { NO_ISLAND } from '../../spacetimedb/src/logic/islands';
 import { PLAYER_COLORS } from '../../spacetimedb/src/logic/players';
 import { KeyboardMovement } from '../input/desktop';
 import { TouchJoystick } from '../input/touch';
 import type { DbConnection } from '../module_bindings';
-import type { Player } from '../module_bindings/types';
+import type { GameState, Piece, Player } from '../module_bindings/types';
 import { Avatar } from '../scene/avatars';
 import { PieceLayer } from '../scene/pieces';
 import { decorateBeach, Effects } from '../scene/effects';
 import { PlotLayer } from '../scene/plots';
 import type { World } from '../scene/world';
 import { ServerClock } from '../net/clock';
+import { IslandSubscription } from '../net/island';
 import { ActivityFeed } from '../ui/feed';
 import { RoundHud } from '../ui/hud';
 import { HomeScreen } from '../ui/home';
@@ -26,13 +28,18 @@ function colorOf(p: Player): number {
   return PLAYER_COLORS[p.colorIndex % PLAYER_COLORS.length];
 }
 
-/** Keeps the 3D scene and HUD in step with the subscribed SpacetimeDB tables. */
+/**
+ * Keeps the 3D scene and HUD in step with the subscribed SpacetimeDB tables. The
+ * local player's own row says which island they are on; the game subscribes to that
+ * island's rows and ignores anything left over from another island.
+ */
 export class Game {
   private readonly avatars = new Map<string, Avatar>();
   private readonly keyboard = new KeyboardMovement();
   private readonly joystick = new TouchJoystick();
   private readonly playerList = new PlayerList();
   private readonly home: HomeScreen;
+  private readonly island: IslandSubscription;
   private readonly pieces: PieceLayer;
   private readonly builder: Builder;
   private readonly feed = new ActivityFeed();
@@ -53,11 +60,11 @@ export class Game {
     identity: Identity,
   ) {
     this.myHex = identity.toHexString();
-    // The main screen comes first; Play enters the island under your username.
-    this.home = new HomeScreen(conn, this.myHex, this.toast, async () => {
-      await conn.reducers.join({ name: '' });
-      this.showHome(false);
-    });
+    this.island = new IslandSubscription(conn, (m) => this.toast.show(m));
+    // The main screen comes first; entering an island hides it.
+    this.home = new HomeScreen(conn, this.myHex, this.toast, () =>
+      this.showHome(false),
+    );
     this.menuButton.addEventListener('click', () => this.showHome(true));
     this.pieces = new PieceLayer(world.scene);
     this.plots = new PlotLayer(world.scene);
@@ -81,25 +88,17 @@ export class Game {
     );
     this.results = new ResultsView(conn);
 
-    conn.db.piece.onInsert((_ctx, row) => {
-      this.pieces.upsert(row);
-      this.hud.refresh();
-    });
-    conn.db.piece.onUpdate((_ctx, _old, row) => this.pieces.upsert(row));
+    conn.db.piece.onInsert((_ctx, row) => this.onPiece(row));
+    conn.db.piece.onUpdate((_ctx, _old, row) => this.onPiece(row));
     conn.db.piece.onDelete((_ctx, row) => {
+      if (!this.here(row)) return;
       this.pieces.remove(row);
       this.hud.refresh();
     });
-    for (const row of conn.db.piece.iter()) this.pieces.upsert(row);
 
-    conn.db.gameState.onUpdate((_ctx, old, row) => {
-      if (old.phase.tag !== row.phase.tag || old.round !== row.round) {
-        // A fresh transition: its start time is a server timestamp from just now.
-        this.clock.sample(row.phaseStartedAt.microsSinceUnixEpoch);
-        this.results.onPhase(row.phase.tag, row.round);
-      }
-      this.refreshRound();
-    });
+    conn.db.gameState.onInsert((_ctx, row) => this.onState(row));
+    conn.db.gameState.onUpdate((_ctx, old, row) => this.onState(row, old));
+    conn.db.gameState.onDelete(() => this.refreshRound());
     // Ballot, ideas, plots, and votes all feed the round card.
     const refresh = () => this.refreshRound();
     for (const table of [
@@ -113,10 +112,8 @@ export class Game {
     }
     conn.db.themeVote.onUpdate(refresh);
     conn.db.plotVote.onUpdate(refresh);
-    this.refreshRound();
-    const initial = conn.db.gameState.id.find(0);
-    if (initial) this.results.onPhase(initial.phase.tag, initial.round);
     conn.db.activity.onInsert((_ctx, event) => {
+      if (!this.here(event)) return;
       this.feed.add(event);
       if (event.kind === 'placed' || event.kind === 'removed') {
         this.effects.puff(
@@ -133,9 +130,14 @@ export class Game {
       this.removeAvatar(row.identity.toHexString());
       this.refreshList();
     });
-    for (const row of conn.db.player.iter()) this.onPlayer(row);
 
-    this.showHome(true);
+    // A returning player is still on their island: go straight back in.
+    const me = [...conn.db.player.iter()].find(
+      (p) => p.identity.toHexString() === this.myHex,
+    );
+    if (me) this.onPlayer(me);
+    this.showHome(!me || me.islandId === NO_ISLAND);
+    this.refreshRound();
     this.refreshList();
   }
 
@@ -159,12 +161,55 @@ export class Game {
     this.world.follow(me ? this.followTarget.copy(me.root.position) : null, dt);
   }
 
+  /** True for rows on the island the local player is on. */
+  private here(row: { islandId: bigint }): boolean {
+    return (
+      this.island.current !== NO_ISLAND && row.islandId === this.island.current
+    );
+  }
+
+  /** Switches the scene and subscription when the local player changes island. */
+  private enterIsland(islandId: bigint): void {
+    if (islandId === this.island.current) return;
+    this.island.switchTo(islandId);
+    // Clear the old island now; its rows are ignored until they leave the cache.
+    this.pieces.clear();
+    for (const hex of [...this.avatars.keys()]) this.removeAvatar(hex);
+    this.local = null;
+    this.builder.setEnabled(false);
+    this.results.hide();
+    if (islandId === NO_ISLAND) this.showHome(true);
+    else this.menuButton.hidden = this.home.visible;
+    this.refreshRound();
+  }
+
+  private onPiece(row: Piece): void {
+    if (!this.here(row)) return;
+    this.pieces.upsert(row);
+    this.hud.refresh();
+  }
+
+  private onState(row: GameState, old?: GameState): void {
+    if (!this.here(row)) return;
+    if (!old || old.phase.tag !== row.phase.tag || old.round !== row.round) {
+      // A fresh transition: its start time is a server timestamp from just now.
+      if (old) this.clock.sample(row.phaseStartedAt.microsSinceUnixEpoch);
+      this.results.onPhase(row.phase.tag, row.round, row.islandId);
+    }
+    this.refreshRound();
+  }
+
   private onPlayer(row: Player, old?: Player): void {
     const hex = row.identity.toHexString();
     const isMe = hex === this.myHex;
+    if (isMe) this.enterIsland(row.islandId);
 
-    if (!row.online) {
+    if (!row.online || !this.here(row)) {
       this.removeAvatar(hex);
+      if (isMe) {
+        this.local = null;
+        this.builder.setEnabled(false);
+      }
     } else {
       let avatar = this.avatars.get(hex);
       if (!avatar) {
@@ -176,11 +221,12 @@ export class Game {
         avatar.setLook(row.name, colorOf(row));
       }
 
+      // A changed move time was stamped just now; a cached row's may be old.
       if (
         isMe &&
-        (!old ||
-          old.lastMoveAt.microsSinceUnixEpoch !==
-            row.lastMoveAt.microsSinceUnixEpoch)
+        old &&
+        old.lastMoveAt.microsSinceUnixEpoch !==
+          row.lastMoveAt.microsSinceUnixEpoch
       ) {
         this.clock.sample(row.lastMoveAt.microsSinceUnixEpoch);
       }
@@ -197,6 +243,7 @@ export class Game {
     const listChanged =
       !old ||
       old.online !== row.online ||
+      old.islandId !== row.islandId ||
       old.name !== row.name ||
       old.colorIndex !== row.colorIndex;
     if (listChanged) this.refreshList();
@@ -210,21 +257,30 @@ export class Game {
   private showHome(visible: boolean): void {
     if (visible) this.home.show();
     else this.home.hide();
-    this.menuButton.hidden = visible;
+    this.menuButton.hidden = visible || this.island.current === NO_ISLAND;
   }
 
   private refreshRound(): void {
     this.hud.refresh();
-    const state = this.conn.db.gameState.id.find(0);
+    const state =
+      this.island.current === NO_ISLAND
+        ? undefined
+        : this.conn.db.gameState.islandId.find(this.island.current);
     const showPlots =
       state?.mode.tag === 'Battle' && state.phase.tag !== 'Lobby';
     this.plots.render(
-      showPlots ? [...this.conn.db.plot.iter()] : null,
+      showPlots
+        ? [...this.conn.db.plot.iter()].filter((p) => this.here(p))
+        : null,
       this.myHex,
     );
   }
 
   private refreshList(): void {
-    this.playerList.render(this.conn.db.player.iter(), this.myHex);
+    this.playerList.render(
+      [...this.conn.db.player.iter()].filter((p) => this.here(p)),
+      this.myHex,
+      this.conn.db.island.id.find(this.island.current)?.name,
+    );
   }
 }

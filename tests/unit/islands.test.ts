@@ -1,0 +1,51 @@
+import { describe, expect, it } from 'vitest';
+import { GRID_SIZE, tileKey } from '../../spacetimedb/src/logic/grid';
+import {
+  cellKey,
+  defaultIslandName,
+  ISLAND_NAME_MAX,
+  parseIslandName,
+  plotKey,
+} from '../../spacetimedb/src/logic/islands';
+import { MAX_PLOTS } from '../../spacetimedb/src/logic/plots';
+
+describe('island keys', () => {
+  it('gives every (island, tile) pair its own cell key', () => {
+    const seen = new Set<bigint>();
+    for (const island of [1n, 2n, 3n, 999n]) {
+      for (let x = 0; x < GRID_SIZE; x++) {
+        for (let z = 0; z < GRID_SIZE; z++) {
+          seen.add(cellKey(island, tileKey(x, z)));
+        }
+      }
+    }
+    expect(seen.size).toBe(4 * GRID_SIZE * GRID_SIZE);
+  });
+
+  it('gives every (island, plot) pair its own plot key', () => {
+    const keys = [1n, 2n, 10n].flatMap((island) =>
+      Array.from({ length: MAX_PLOTS }, (_, i) => plotKey(island, i)),
+    );
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+});
+
+describe('island names', () => {
+  it('trims and collapses whitespace', () => {
+    expect(parseIslandName('  Coral   Reef ')).toBe('Coral Reef');
+  });
+
+  it('rejects names that are too short or too long', () => {
+    expect(parseIslandName('ab')).toBeNull();
+    expect(parseIslandName('   ')).toBeNull();
+    expect(parseIslandName('x'.repeat(ISLAND_NAME_MAX + 1))).toBeNull();
+    expect(parseIslandName('x'.repeat(ISLAND_NAME_MAX))).not.toBeNull();
+  });
+
+  it('suggests a default name that always fits', () => {
+    expect(defaultIslandName('Ada')).toBe("Ada's Island");
+    const long = defaultIslandName('Sixteen Chars Ab');
+    expect(long.length).toBeLessThanOrEqual(ISLAND_NAME_MAX);
+    expect(parseIslandName(long)).toBe(long);
+  });
+});

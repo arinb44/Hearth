@@ -12,6 +12,7 @@ import {
 
 export default __t.row({
   identity: __t.identity().primaryKey(),
+  islandId: __t.u64().name("island_id"),
   name: __t.string(),
   colorIndex: __t.u8().name("color_index"),
   online: __t.bool(),

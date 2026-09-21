@@ -15,12 +15,26 @@ export const Phase = t.enum('Phase', [
 ]);
 export const Mode = t.enum('Mode', ['Coop', 'Battle']);
 
-// Singleton row (id 0) describing the shared round state. Clients render the HUD and
+// Islands: separate worlds, each with its own board and rounds. `ownerAccountId` 0 is
+// the shared main island created in `init`; `playerCount` (online players there) is
+// kept up to date by every reducer that moves a player.
+const island = table(
+  { name: 'island', public: true },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    name: t.string(),
+    ownerAccountId: t.u64().index('btree'),
+    playerCount: t.u32(),
+    createdAt: t.timestamp(),
+  },
+);
+
+// One row per island describing its round state. Clients render the HUD and
 // countdown from it; only reducers (and the phase timer) change it.
 const gameState = table(
   { name: 'game_state', public: true },
   {
-    id: t.u8().primaryKey(),
+    islandId: t.u64().primaryKey(),
     phase: Phase,
     mode: Mode,
     round: t.u32(),
@@ -33,7 +47,8 @@ const gameState = table(
   },
 );
 
-// Singleton row (id 0) with round timing in seconds; only the admin can change it.
+// Singleton row (id 0) with round timing in seconds for every island; only the admin
+// can change it.
 const config = table(
   { name: 'config', public: true },
   {
@@ -56,6 +71,7 @@ export const phaseTimer = table(
   {
     scheduledId: t.u64().primaryKey().autoInc(),
     scheduledAt: t.scheduleAt(),
+    islandId: t.u64(),
     round: t.u32(),
     phase: Phase,
   },
@@ -71,7 +87,9 @@ const Contribution = t.object('Contribution', {
 const roundResult = table(
   { name: 'round_result', public: true },
   {
-    round: t.u32().primaryKey(),
+    id: t.u64().primaryKey().autoInc(),
+    islandId: t.u64().index('btree'),
+    round: t.u32(),
     mode: Mode,
     themeTitle: t.string(),
     challengeId: t.u8(),
@@ -83,10 +101,12 @@ const roundResult = table(
   },
 );
 
+// `islandId` is NO_ISLAND (0) while the player is on the main screen.
 const player = table(
   { name: 'player', public: true },
   {
     identity: t.identity().primaryKey(),
+    islandId: t.u64().index('btree'),
     name: t.string(),
     colorIndex: t.u8(),
     online: t.bool(),
@@ -107,13 +127,15 @@ const session = table(
   },
 );
 
-// The shared board. `tileKey` is unique, so the database itself guarantees at most
-// one piece per tile even when several players click the same tile at once.
+// Every island's board. `cellKey` (island and tile) is unique, so the database itself
+// guarantees at most one piece per tile even when several players click it at once.
 const piece = table(
   { name: 'piece', public: true },
   {
     id: t.u64().primaryKey().autoInc(),
-    tileKey: t.u32().unique(),
+    islandId: t.u64().index('btree'),
+    cellKey: t.u64().unique(),
+    tileKey: t.u32(),
     tileX: t.u8(),
     tileZ: t.u8(),
     kind: t.string(),
@@ -129,6 +151,7 @@ const piece = table(
 const activity = table(
   { name: 'activity', public: true, event: true },
   {
+    islandId: t.u64(),
     kind: t.string(),
     actorName: t.string(),
     colorIndex: t.u8(),
@@ -143,6 +166,7 @@ const idea = table(
   { name: 'idea', public: true },
   {
     id: t.u64().primaryKey().autoInc(),
+    islandId: t.u64().index('btree'),
     author: t.identity().unique(),
     authorName: t.string(),
     text: t.string(),
@@ -154,16 +178,21 @@ const themeVote = table(
   { name: 'theme_vote', public: true },
   {
     voter: t.identity().primaryKey(),
+    islandId: t.u64().index('btree'),
     option: t.string(),
   },
 );
 
 // Build Battle: each builder's plot for the current round, and the best-build vote.
+// `plotKey` (island and plot) is unique, so a plot has one builder per island.
 const plot = table(
   { name: 'plot', public: true },
   {
-    builder: t.identity().primaryKey(),
-    plotIndex: t.u8().unique(),
+    id: t.u64().primaryKey().autoInc(),
+    islandId: t.u64().index('btree'),
+    plotKey: t.u64().unique(),
+    builder: t.identity().index('btree'),
+    plotIndex: t.u8(),
     builderName: t.string(),
     colorIndex: t.u8(),
   },
@@ -173,6 +202,7 @@ const plotVote = table(
   { name: 'plot_vote', public: true },
   {
     voter: t.identity().primaryKey(),
+    islandId: t.u64().index('btree'),
     plotIndex: t.u8(),
   },
 );
@@ -204,6 +234,7 @@ export const accountSecret = table(
 );
 
 export const spacetimedb = schema({
+  island,
   gameState,
   config,
   admin,

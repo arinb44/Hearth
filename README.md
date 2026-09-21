@@ -1,8 +1,10 @@
 # SpacetimeDemoMHacks: Coop Builder
 
-A low-poly 3D multiplayer building game for up to 10 players, built for the MHacks
-"Best use of Spacetime" track. Players walk around a shared island as avatars and
-place pieces on a tile grid. Each round is chosen by a live lobby vote:
+A low-poly 3D multiplayer building game, built for the MHacks "Best use of
+Spacetime" track. Players make an account (a username plus a recovery code), then
+enter the shared Main Island or an island of their own, with up to 10 players per
+island. On an island they walk around as avatars and place pieces on a tile grid.
+Each round is chosen by a live lobby vote:
 
 - **Co-op Challenge**: everyone builds toward a target list ("4 Houses, every House
   next to a Path…") before the clock runs out. The server scores the board, and
@@ -17,12 +19,14 @@ SpacetimeDB is the entire backend. There is no other server.
 | Concern                                                      | SpacetimeDB feature                                                                                       |
 | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
 | Players, positions, pieces, rounds, votes, results           | Public **tables** (`player`, `piece`, `game_state`, `theme_vote`, `plot`, `plot_vote`, `round_result`, …) |
+| Separate islands, each with its own board and rounds         | An `island_id` on every per-world row; clients **subscribe with a filter** to just their island           |
 | Every action (move, place, vote, start)                      | **Reducers**: server-validated transactions (bounds, reach, speed limit, plot rules)                      |
-| One piece per tile, even when 10 players click the same tile | A **unique column** (`piece.tile_key`): exactly one transaction wins                                      |
+| One piece per tile, even when 10 players click the same tile | A **unique column** (`piece.cell_key`, island + tile): exactly one transaction wins                       |
 | Round clock (Lobby → Building → Scoring/Voting → Results)    | **Scheduled reducers** on a `phase_timer` schedule table; clients never drive time                        |
 | Activity feed ("Ada placed a House")                         | An **event table** (`activity`)                                                                           |
 | Live UI on every client                                      | **Subscriptions**: the client renders only what the database sends                                        |
 | Multiple tabs, reconnects                                    | Identity tokens + a private `session` table                                                               |
+| Accounts and recovery codes                                  | A private `account_secret` table, readable only through a **per-user view** (`my_recovery_code`)          |
 
 The game rules (placement, movement limits, scoring, vote tally) live in
 `spacetimedb/src/logic/`. The module enforces them and the client uses the same code
@@ -33,7 +37,9 @@ for previews, so the two can't disagree.
 ```
 spacetimedb/        SpacetimeDB module (TypeScript)
   src/schema.ts     tables
-  src/rounds.ts     round state machine
+  src/rounds.ts     round state machine (one per island)
+  src/islands.ts    island helpers: creation, player counts
+  src/accounts.ts   account helpers: recovery codes, saved stats
   src/index.ts      reducers and lifecycle hooks
   src/logic/        pure, unit-tested game rules shared with the client
 src/                web client (Vite + TypeScript + Three.js)
@@ -90,17 +96,21 @@ clients. They check convergence, the same-tile race, rounds, battles, and reconn
    builds the client and deploys it with `.github/workflows/pages.yml`, configured
    by `.env.production`.
 
-Load test against Maincloud: `npm run bots -- --count 10 --target maincloud --seconds 60`.
+Load test against Maincloud: `npm run bots -- --count 9 --target maincloud --seconds 60`
+(bots enter the Main Island; 9 leaves a seat free, since islands hold 10).
+`--island <id>` sends them to another island.
 
 ## Admin controls
 
-The identity that published the module is the admin:
+The identity that published the module is the admin. Phase controls take an island
+id; the Main Island is `1` (list them with
+`spacetime sql coop-builder-mhacks "SELECT id, name FROM island"`):
 
 ```bash
-spacetime call coop-builder-mhacks skip_phase       # end the current phase now
-spacetime call coop-builder-mhacks reset_game       # clear the board, back to lobby
+spacetime call coop-builder-mhacks skip_phase 1     # end the island's current phase now
+spacetime call coop-builder-mhacks reset_game 1     # clear the island's board, back to lobby
 spacetime call coop-builder-mhacks configure_timing 30 120 4 25 12
-#                        lobby build scoring voting results (seconds; lobby 0 = no auto-start)
+#                        lobby build scoring voting results (seconds; lobby 0 = no auto-start; all islands)
 ```
 
 ## Demo script (judging)
@@ -109,11 +119,12 @@ spacetime call coop-builder-mhacks configure_timing 30 120 4 25 12
 
 1. Open https://arinb44.github.io/SpacetimeDemoMHacks/ about 2 minutes early. The
    free-tier database pauses when idle, and the first connection wakes it.
-2. Optional clean slate: `spacetime call coop-builder-mhacks reset_game`.
+2. Optional clean slate: `spacetime call coop-builder-mhacks reset_game 1`.
 3. Optional shorter rounds for a tight slot:
    `spacetime call coop-builder-mhacks configure_timing 20 60 3 20 8`.
 4. Put the game on the projector from a laptop. Judges join on their own phones
-   (held sideways) or laptops with the same URL.
+   (held sideways) or laptops with the same URL: pick a username, then **Play** on
+   the Main Island (or on your island, which shows up in their list once you're on it).
 
 **What to show (about 4 minutes)**
 

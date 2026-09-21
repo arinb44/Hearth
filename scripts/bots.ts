@@ -1,8 +1,10 @@
-// Simulated players for load testing and demo rehearsal. Each bot joins, wanders,
-// and places pieces near itself, and the script reports reducer round-trip times.
+// Simulated players for load testing and demo rehearsal. Each bot enters the main
+// island (or the one given by --island), wanders, and places pieces near itself,
+// and the script reports reducer round-trip times.
 //
 //   npm run bots -- --count 10 --target maincloud --seconds 60
 //   npm run bots -- --count 3 --target local --seconds 20 --no-build
+//   npm run bots -- --count 9 --target local --island 2
 import { DbConnection } from '../src/module_bindings';
 import { worldToTile } from '../spacetimedb/src/logic/grid';
 import {
@@ -10,6 +12,7 @@ import {
   WALK_SPEED,
   type Vec2,
 } from '../spacetimedb/src/logic/movement';
+import { NO_OWNER } from '../spacetimedb/src/logic/islands';
 import { PIECE_KINDS } from '../spacetimedb/src/logic/pieces';
 import { plotCenter } from '../spacetimedb/src/logic/plots';
 
@@ -31,6 +34,7 @@ const seconds = Number(option('seconds', '60'));
 const targetName = option('target', 'local') as keyof typeof TARGETS;
 const target = TARGETS[targetName];
 const build = !process.argv.includes('--no-build');
+const islandOption = option('island', '');
 if (!target)
   throw new Error(`Unknown target "${targetName}" (use local or maincloud)`);
 
@@ -69,7 +73,10 @@ function connectBot(): Promise<{ conn: DbConnection; hex: string }> {
 
 async function runBot(index: number, deadline: number): Promise<DbConnection> {
   const { conn, hex } = await connectBot();
-  await conn.reducers.join({ name: `Bot ${index + 1}` });
+  const islandId = islandOption
+    ? BigInt(islandOption)
+    : [...conn.db.island.iter()].find((i) => i.ownerAccountId === NO_OWNER)!.id;
+  await conn.reducers.enterIsland({ islandId, name: `Bot ${index + 1}` });
   const me = () =>
     [...conn.db.player.iter()].find((p) => p.identity.toHexString() === hex)!;
   let pos: Vec2 = { x: me().x, z: me().z };
@@ -77,9 +84,9 @@ async function runBot(index: number, deadline: number): Promise<DbConnection> {
   let lastRound = -1;
 
   while (Date.now() < deadline) {
-    const state = conn.db.gameState.id.find(0);
+    const state = conn.db.gameState.islandId.find(islandId);
     const myPlot = [...conn.db.plot.iter()].find(
-      (p) => p.builder.toHexString() === hex,
+      (p) => p.islandId === islandId && p.builder.toHexString() === hex,
     );
     if (state && state.round !== lastRound) {
       // Server may have moved us (battle plots): restart from where it put us.

@@ -1,13 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { Identity } from 'spacetimedb';
 import type { DbConnection } from '../../src/module_bindings';
 import { worldToTile } from '../../spacetimedb/src/logic/grid';
 import { formatRecoveryCode } from '../../spacetimedb/src/logic/accounts';
 import {
-  adminCall,
   connectClient,
   connectClients,
   disconnectAll,
+  enterAll,
+  newIsland,
   waitFor,
   type TestClient,
 } from './helpers';
@@ -23,7 +24,6 @@ const myCode = (conn: DbConnection) =>
 
 describe('accounts', () => {
   const clients: TestClient[] = [];
-  beforeEach(() => adminCall('reset_game'));
   afterEach(() => disconnectAll(clients));
 
   it('creates an account whose recovery code only its owner can see', async () => {
@@ -105,7 +105,7 @@ describe('accounts', () => {
     const player = await connectClient();
     clients.push(player);
     await player.conn.reducers.createAccount({ username: uniqueName('Dee') });
-    await player.conn.reducers.join({ name: 'ignored' });
+    await enterAll([player], await newIsland(), () => 'ignored');
     await waitFor(
       () => player.conn.db.player.identity.find(player.identity) !== null,
       'player row',

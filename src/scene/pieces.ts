@@ -67,6 +67,12 @@ export class PieceLayer {
     this.redrawNeighbours(row.tileX, row.tileZ);
   }
 
+  /** Removes every piece, when switching islands. */
+  clear(): void {
+    for (const entry of this.placed.values()) entry.object.removeFromParent();
+    this.placed.clear();
+  }
+
   update(dt: number): void {
     this.time += dt;
     for (const entry of this.placed.values()) {

@@ -2,8 +2,17 @@ import {
   formatRecoveryCode,
   USERNAME_MAX,
 } from '../../spacetimedb/src/logic/accounts';
+import {
+  defaultIslandName,
+  ISLAND_NAME_MAX,
+  MAX_ISLAND_PLAYERS,
+  MAX_ISLANDS_PER_ACCOUNT,
+  NO_ISLAND,
+  NO_OWNER,
+} from '../../spacetimedb/src/logic/islands';
 import type { DbConnection } from '../module_bindings';
-import type { Account } from '../module_bindings/types';
+import type { Account, Island } from '../module_bindings/types';
+import { myIslandId } from '../net/queries';
 import { colorDot } from './colors';
 import type { Toast } from './toast';
 
@@ -23,18 +32,21 @@ function el<K extends keyof HTMLElementTagNameMap>(
 
 /**
  * The main screen: create or recover an account, see your profile, stats, and
- * recovery code, then play. Everything shown here is read live from the database.
+ * recovery code, then pick an island. Everything shown here is read live from the
+ * database.
  */
 export class HomeScreen {
   private readonly root = document.getElementById('home')!;
   private readonly body = this.root.querySelector<HTMLElement>('.home-body')!;
+  // Re-rendered on its own, so live player counts never wipe a half-typed form.
+  private readonly islandList = el('ul', { className: 'islands' });
   private codeVisible = false;
 
   constructor(
     private readonly conn: DbConnection,
     private readonly myHex: string,
     private readonly toast: Toast,
-    private readonly onPlay: () => Promise<void>,
+    private readonly onEntered: () => void,
   ) {
     const refresh = () => this.render();
     conn.db.account.onInsert(refresh);
@@ -42,6 +54,17 @@ export class HomeScreen {
     conn.db.account.onDelete(refresh);
     conn.db.myRecoveryCode.onInsert(refresh);
     conn.db.myRecoveryCode.onDelete(refresh);
+    const refreshIslands = () => this.renderIslands();
+    conn.db.island.onInsert(refreshIslands);
+    conn.db.island.onUpdate(refreshIslands);
+    conn.db.island.onDelete(refreshIslands);
+    conn.db.player.onInsert((_ctx, row) => {
+      if (row.identity.toHexString() === myHex) this.render();
+    });
+    conn.db.player.onUpdate((_ctx, old, row) => {
+      if (row.identity.toHexString() === myHex && old.islandId !== row.islandId)
+        this.render();
+    });
     this.render();
   }
 
@@ -177,14 +200,6 @@ export class HomeScreen {
       ),
     );
 
-    const play = el('button', { type: 'button', className: 'play' }, 'Play');
-    play.addEventListener('click', () => {
-      play.disabled = true;
-      this.onPlay()
-        .catch((err: unknown) => this.toast.show(errorMessage(err)))
-        .finally(() => (play.disabled = false));
-    });
-
     return [
       el(
         'div',
@@ -207,7 +222,123 @@ export class HomeScreen {
         { className: 'muted small' },
         'Use it to sign in on another device. Keep it secret: anyone with it can use your account.',
       ),
-      play,
+      ...this.islands(account),
     ];
+  }
+
+  private enter(islandId: bigint, button: HTMLButtonElement): void {
+    button.disabled = true;
+    this.conn.reducers
+      .enterIsland({ islandId, name: '' })
+      .then(() => this.onEntered())
+      .catch((err: unknown) => {
+        button.disabled = false;
+        this.toast.show(errorMessage(err));
+      });
+  }
+
+  private islands(account: Account): HTMLElement[] {
+    this.renderIslands(account);
+    const owned = [...this.conn.db.island.iter()].filter(
+      (i) => i.ownerAccountId === account.id,
+    ).length;
+    const out: HTMLElement[] = [el('h3', {}, 'Islands'), this.islandList];
+
+    if (owned < MAX_ISLANDS_PER_ACCOUNT) {
+      const name = el('input', {
+        placeholder: defaultIslandName(account.username),
+        maxLength: ISLAND_NAME_MAX,
+        autocomplete: 'off',
+      });
+      const create = el(
+        'form',
+        { className: 'home-form' },
+        name,
+        el('button', { type: 'submit', className: 'secondary' }, 'New island'),
+      );
+      create.addEventListener('submit', (e) => {
+        e.preventDefault();
+        this.call(this.conn.reducers.createIsland({ name: name.value }), () =>
+          this.onEntered(),
+        );
+      });
+      out.push(create);
+    }
+
+    if (myIslandId(this.conn, this.myHex) !== NO_ISLAND) {
+      const leave = el(
+        'button',
+        { type: 'button', className: 'link' },
+        'Leave island',
+      );
+      leave.addEventListener('click', () =>
+        this.call(this.conn.reducers.leaveIsland({})),
+      );
+      out.push(el('p', { className: 'muted small' }, leave));
+    }
+    return out;
+  }
+
+  /** The main island, your islands, and any island with players on it. */
+  private renderIslands(account = this.myAccount()): void {
+    if (this.root.hidden || !account) return;
+    const current = myIslandId(this.conn, this.myHex);
+    const rank = (i: Island) =>
+      i.ownerAccountId === NO_OWNER
+        ? 0
+        : i.ownerAccountId === account.id
+          ? 1
+          : 2;
+    const shown = [...this.conn.db.island.iter()]
+      .filter((i) => rank(i) < 2 || i.id === current || i.playerCount > 0)
+      .sort(
+        (a, b) =>
+          rank(a) - rank(b) ||
+          b.playerCount - a.playerCount ||
+          Number(a.id - b.id),
+      )
+      .slice(0, 8);
+
+    this.islandList.replaceChildren(
+      ...shown.map((island) => {
+        const here = island.id === current;
+        const full = !here && island.playerCount >= MAX_ISLAND_PLAYERS;
+        const button = el(
+          'button',
+          { type: 'button', className: here ? 'play' : '', disabled: full },
+          here ? 'Resume' : full ? 'Full' : 'Play',
+        );
+        button.addEventListener('click', () => this.enter(island.id, button));
+        return el(
+          'li',
+          { className: here ? 'here' : '' },
+          el(
+            'div',
+            {},
+            el('strong', {}, island.name),
+            el(
+              'span',
+              { className: 'muted small' },
+              this.ownerLabel(island, account) +
+                ' · ' +
+                island.playerCount +
+                '/' +
+                MAX_ISLAND_PLAYERS +
+                ' online',
+            ),
+          ),
+          button,
+        );
+      }),
+    );
+  }
+
+  private ownerLabel(island: Island, me: Account): string {
+    if (island.ownerAccountId === NO_OWNER) return 'Open to everyone';
+    if (island.ownerAccountId === me.id) return 'Your island';
+    for (const a of this.conn.db.account.iter()) {
+      if (a.id === island.ownerAccountId) return 'Host: ' + a.username;
+    }
+    return 'Player island';
   }
 }

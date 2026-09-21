@@ -12,5 +12,6 @@ import {
 
 export default __t.row({
   voter: __t.identity().primaryKey(),
+  islandId: __t.u64().name("island_id"),
   plotIndex: __t.u8().name("plot_index"),
 });

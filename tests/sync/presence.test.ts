@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Identity } from 'spacetimedb';
 import type { DbConnection } from '../../src/module_bindings';
 import { MAX_SPEED, MOVE_BURST } from '../../spacetimedb/src/logic/movement';
@@ -6,6 +6,8 @@ import {
   connectClient,
   connectClients,
   disconnectAll,
+  enterAll,
+  newIsland,
   waitFor,
   type TestClient,
 } from './helpers';
@@ -16,13 +18,15 @@ function playerOf(conn: DbConnection, identity: Identity) {
 
 describe('presence and movement sync', () => {
   const clients: TestClient[] = [];
+  let island = 0n;
+  beforeEach(async () => {
+    island = await newIsland();
+  });
   afterEach(() => disconnectAll(clients));
 
   it('shows every joined player, with the same name and color, on every client', async () => {
     clients.push(...(await connectClients(5)));
-    await Promise.all(
-      clients.map((c, i) => c.conn.reducers.join({ name: `Player ${i}` })),
-    );
+    await enterAll(clients, island, (i) => `Player ${i}`);
 
     for (const viewer of clients) {
       await waitFor(
@@ -47,9 +51,7 @@ describe('presence and movement sync', () => {
 
   it('converges every client on the same positions after concurrent moves', async () => {
     clients.push(...(await connectClients(5)));
-    await Promise.all(
-      clients.map((c) => c.conn.reducers.join({ name: 'Mover' })),
-    );
+    await enterAll(clients, island, () => 'Mover');
 
     // Each player takes a short, legal step from their spawn point at the same time.
     await Promise.all(
@@ -90,7 +92,7 @@ describe('presence and movement sync', () => {
   it('clamps a teleport on the server and every client sees the clamped position', async () => {
     clients.push(...(await connectClients(2)));
     const [mover, watcher] = clients;
-    await mover.conn.reducers.join({ name: 'Teleporter' });
+    await enterAll([mover], island, () => 'Teleporter');
     const start = playerOf(mover.conn, mover.identity)!;
 
     await mover.conn.reducers.move({ x: start.x + 50, z: start.z, heading: 0 });
@@ -105,7 +107,7 @@ describe('presence and movement sync', () => {
     expect(moved).toBeLessThanOrEqual(MAX_SPEED * MOVE_BURST + 0.01);
   });
 
-  it('rejects movement from a client that has not joined', async () => {
+  it('rejects movement from a client that is not on an island', async () => {
     clients.push(await connectClient());
     await expect(
       clients[0].conn.reducers.move({ x: 1, z: 1, heading: 0 }),
@@ -116,7 +118,7 @@ describe('presence and movement sync', () => {
     const first = await connectClient();
     const watcher = await connectClient();
     clients.push(first, watcher);
-    await first.conn.reducers.join({ name: 'Two Tabs' });
+    await enterAll([first], island, () => 'Two Tabs');
     const second = await connectClient(first.token);
     expect(second.identity.isEqual(first.identity)).toBe(true);
 
@@ -135,7 +137,7 @@ describe('presence and movement sync', () => {
     const original = await connectClient();
     const watcher = await connectClient();
     clients.push(watcher);
-    await original.conn.reducers.join({ name: 'Comeback' });
+    await enterAll([original], island, () => 'Comeback');
     original.conn.disconnect();
     await waitFor(
       () => playerOf(watcher.conn, original.identity)?.online === false,
@@ -149,6 +151,13 @@ describe('presence and movement sync', () => {
       () => playerOf(watcher.conn, original.identity)?.online === true,
       'online again after reconnect',
     );
-    expect(playerOf(again.conn, original.identity)!.name).toBe('Comeback');
+    // Back on the same island, which counts them again.
+    const row = playerOf(again.conn, original.identity)!;
+    expect(row.name).toBe('Comeback');
+    expect(row.islandId).toBe(island);
+    await waitFor(
+      () => watcher.conn.db.island.id.find(island)?.playerCount === 1,
+      'island counts the returning player',
+    );
   });
 });

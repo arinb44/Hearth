@@ -30,6 +30,7 @@ export const AccountSecret = __t.object("AccountSecret", {
 export type AccountSecret = __Infer<typeof AccountSecret>;
 
 export const Activity = __t.object("Activity", {
+  islandId: __t.u64(),
   kind: __t.string(),
   actorName: __t.string(),
   colorIndex: __t.u8(),
@@ -63,7 +64,7 @@ export const Contribution = __t.object("Contribution", {
 export type Contribution = __Infer<typeof Contribution>;
 
 export const GameState = __t.object("GameState", {
-  id: __t.u8(),
+  islandId: __t.u64(),
   get phase() {
     return Phase;
   },
@@ -82,12 +83,22 @@ export type GameState = __Infer<typeof GameState>;
 
 export const Idea = __t.object("Idea", {
   id: __t.u64(),
+  islandId: __t.u64(),
   author: __t.identity(),
   authorName: __t.string(),
   text: __t.string(),
   createdAt: __t.timestamp(),
 });
 export type Idea = __Infer<typeof Idea>;
+
+export const Island = __t.object("Island", {
+  id: __t.u64(),
+  name: __t.string(),
+  ownerAccountId: __t.u64(),
+  playerCount: __t.u32(),
+  createdAt: __t.timestamp(),
+});
+export type Island = __Infer<typeof Island>;
 
 // The tagged union or sum type for the algebraic type `Mode`.
 export const Mode = __t.enum("Mode", {
@@ -112,6 +123,7 @@ export type Phase = __Infer<typeof Phase>;
 export const PhaseTimer = __t.object("PhaseTimer", {
   scheduledId: __t.u64(),
   scheduledAt: __t.scheduleAt(),
+  islandId: __t.u64(),
   round: __t.u32(),
   get phase() {
     return Phase;
@@ -121,6 +133,8 @@ export type PhaseTimer = __Infer<typeof PhaseTimer>;
 
 export const Piece = __t.object("Piece", {
   id: __t.u64(),
+  islandId: __t.u64(),
+  cellKey: __t.u64(),
   tileKey: __t.u32(),
   tileX: __t.u8(),
   tileZ: __t.u8(),
@@ -134,6 +148,7 @@ export type Piece = __Infer<typeof Piece>;
 
 export const Player = __t.object("Player", {
   identity: __t.identity(),
+  islandId: __t.u64(),
   name: __t.string(),
   colorIndex: __t.u8(),
   online: __t.bool(),
@@ -146,6 +161,9 @@ export const Player = __t.object("Player", {
 export type Player = __Infer<typeof Player>;
 
 export const Plot = __t.object("Plot", {
+  id: __t.u64(),
+  islandId: __t.u64(),
+  plotKey: __t.u64(),
   builder: __t.identity(),
   plotIndex: __t.u8(),
   builderName: __t.string(),
@@ -155,11 +173,14 @@ export type Plot = __Infer<typeof Plot>;
 
 export const PlotVote = __t.object("PlotVote", {
   voter: __t.identity(),
+  islandId: __t.u64(),
   plotIndex: __t.u8(),
 });
 export type PlotVote = __Infer<typeof PlotVote>;
 
 export const RoundResult = __t.object("RoundResult", {
+  id: __t.u64(),
+  islandId: __t.u64(),
   round: __t.u32(),
   get mode() {
     return Mode;
@@ -184,6 +205,7 @@ export type Session = __Infer<typeof Session>;
 
 export const ThemeVote = __t.object("ThemeVote", {
   voter: __t.identity(),
+  islandId: __t.u64(),
   option: __t.string(),
 });
 export type ThemeVote = __Infer<typeof ThemeVote>;

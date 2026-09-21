@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { DbConnection } from '../../src/module_bindings';
-import { pieceAt } from '../../src/net/queries';
+import { pieceAt, resultFor } from '../../src/net/queries';
 import { worldToTile, type Tile } from '../../spacetimedb/src/logic/grid';
 import {
   challengeById,
@@ -8,14 +8,16 @@ import {
 } from '../../spacetimedb/src/logic/challenges';
 import { TEST_TIMING } from './config';
 import {
-  adminCall,
   connectClients,
   disconnectAll,
+  enterAll,
+  newIsland,
   waitFor,
   type TestClient,
 } from './helpers';
 
-const state = (conn: DbConnection) => conn.db.gameState.id.find(0)!;
+let island = 0n;
+const state = (conn: DbConnection) => conn.db.gameState.islandId.find(island)!;
 const phaseOf = (conn: DbConnection) => state(conn).phase.tag;
 
 interface Placement {
@@ -59,17 +61,21 @@ function layoutFor(challenge: Challenge, origin: Tile): Placement[] {
 
 describe('round engine', () => {
   const clients: TestClient[] = [];
-  beforeEach(() => adminCall('reset_game'));
-  afterEach(() => {
-    disconnectAll(clients);
-    adminCall('reset_game');
+  beforeEach(async () => {
+    island = await newIsland();
   });
+  afterEach(() => disconnectAll(clients));
 
   it('keeps admin controls away from players', async () => {
     clients.push(...(await connectClients(1)));
     const [player] = clients;
-    await player.conn.reducers.join({ name: 'Not Admin' });
-    await expect(player.conn.reducers.skipPhase({})).rejects.toThrow();
+    await enterAll([player], island, () => 'Not Admin');
+    await expect(
+      player.conn.reducers.skipPhase({ islandId: island }),
+    ).rejects.toThrow();
+    await expect(
+      player.conn.reducers.resetGame({ islandId: island }),
+    ).rejects.toThrow();
     await expect(
       player.conn.reducers.configureTiming({
         lobbySeconds: 0,
@@ -87,9 +93,7 @@ describe('round engine', () => {
   it('runs a full timed round identically on every client', async () => {
     clients.push(...(await connectClients(3)));
     const [starter, other, watcher] = clients;
-    await Promise.all(
-      clients.map((c, i) => c.conn.reducers.join({ name: `Round ${i}` })),
-    );
+    await enterAll(clients, island, (i) => `Round ${i}`);
     const me = starter.conn.db.player.identity.find(starter.identity)!;
     const tile = { x: worldToTile(me.x), z: worldToTile(me.z) };
     await starter.conn.reducers.placePiece({
@@ -106,7 +110,8 @@ describe('round engine', () => {
     for (const c of clients) {
       await waitFor(
         () =>
-          phaseOf(c.conn) === 'Building' && pieceAt(c.conn, tile) === undefined,
+          phaseOf(c.conn) === 'Building' &&
+          pieceAt(c.conn, island, tile) === undefined,
         'building phase with a cleared board',
       );
     }
@@ -136,11 +141,11 @@ describe('round engine', () => {
     const round = state(watcher.conn).round;
     for (const c of clients) {
       await waitFor(
-        () => c.conn.db.roundResult.round.find(round) !== null,
+        () => resultFor(c.conn, island, round) !== undefined,
         'result row',
       );
     }
-    const result = watcher.conn.db.roundResult.round.find(round)!;
+    const result = resultFor(watcher.conn, island, round)!;
     expect(result.completed).toBe(false);
     expect(result.score).toBe(state(watcher.conn).teamScore);
 
@@ -160,9 +165,7 @@ describe('round engine', () => {
   it('ends the round early with a time bonus when every target is met', async () => {
     clients.push(...(await connectClients(2)));
     const [builder, watcher] = clients;
-    await Promise.all(
-      clients.map((c, i) => c.conn.reducers.join({ name: `Finisher ${i}` })),
-    );
+    await enterAll(clients, island, (i) => `Finisher ${i}`);
     await builder.conn.reducers.startRound({});
     await waitFor(() => phaseOf(builder.conn) === 'Building', 'building');
 
@@ -181,10 +184,10 @@ describe('round engine', () => {
     const round = state(builder.conn).round;
     await waitFor(() => phaseOf(watcher.conn) === 'Scoring', 'early finish');
     await waitFor(
-      () => watcher.conn.db.roundResult.round.find(round) !== null,
+      () => resultFor(watcher.conn, island, round) !== undefined,
       'result row',
     );
-    const result = watcher.conn.db.roundResult.round.find(round)!;
+    const result = resultFor(watcher.conn, island, round)!;
     expect(result.completed).toBe(true);
     expect(result.score).toBeGreaterThan(100);
     expect(result.stars).toBeGreaterThanOrEqual(2);

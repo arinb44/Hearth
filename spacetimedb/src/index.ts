@@ -1,6 +1,17 @@
 import type { Identity } from 'spacetimedb';
 import { SenderError, t } from 'spacetimedb/server';
 import { tileKey } from './logic/grid';
+import {
+  cellKey,
+  defaultIslandName,
+  MAIN_ISLAND_NAME,
+  MAX_ISLAND_PLAYERS,
+  MAX_ISLANDS_PER_ACCOUNT,
+  NO_ISLAND,
+  NO_OWNER,
+  parseIslandName,
+  plotKey,
+} from './logic/islands';
 import { constrainMove, isFiniteVec, normalizeHeading } from './logic/movement';
 import { DEFAULT_TIMING, isValidTiming } from './logic/phases';
 import {
@@ -24,6 +35,13 @@ import {
   requireAccount,
 } from './accounts';
 import {
+  colorsInUse,
+  createIslandRow,
+  refreshPlayerCount,
+  requireIsland,
+  withdrawVotes,
+} from './islands';
+import {
   optionKey,
   parseOptionKey,
   presetOptionKeys,
@@ -43,7 +61,9 @@ import { accountSecret, phaseTimer, spacetimedb, type Ctx } from './schema';
 
 export default spacetimedb;
 
-type PlayerRow = ReturnType<typeof requirePlayer>;
+type PlayerRow = NonNullable<
+  ReturnType<Ctx['db']['player']['identity']['find']>
+>;
 
 function failIf(error: BuildError | null): void {
   if (error) throw new SenderError(BUILD_ERROR_MESSAGES[error]);
@@ -58,6 +78,7 @@ function logActivity(
   tileZ = 0,
 ): void {
   ctx.db.activity.insert({
+    islandId: actor.islandId,
     kind,
     actorName: actor.name,
     colorIndex: actor.colorIndex,
@@ -73,9 +94,12 @@ function requireName(raw: string): string {
   return name;
 }
 
-function requirePlayer(ctx: Ctx) {
+/** The caller's player row; they must be on an island. */
+function requirePlayer(ctx: Ctx): PlayerRow {
   const row = ctx.db.player.identity.find(ctx.sender);
-  if (!row) throw new SenderError('Join the game first');
+  if (!row || row.islandId === NO_ISLAND) {
+    throw new SenderError('Enter an island first');
+  }
   return row;
 }
 
@@ -90,29 +114,22 @@ function hasSession(ctx: Ctx, identity: Identity): boolean {
   return false;
 }
 
-function colorsInUse(ctx: Ctx, except: Identity): number[] {
-  const used: number[] = [];
-  for (const p of ctx.db.player.iter()) {
-    if (p.online && !p.identity.equals(except)) used.push(p.colorIndex);
-  }
-  return used;
+/** Keeps `preferred` (the account's or last color) unless someone on the island has it. */
+function colorFor(
+  ctx: Ctx,
+  islandId: bigint,
+  preferred: number | undefined,
+): number {
+  const used = colorsInUse(ctx, islandId, ctx.sender);
+  return preferred !== undefined && !used.includes(preferred)
+    ? preferred
+    : pickColorIndex(used);
 }
 
 export const init = spacetimedb.init((ctx) => {
   ctx.db.admin.insert({ identity: ctx.sender });
   ctx.db.config.insert({ id: 0, ...DEFAULT_TIMING });
-  ctx.db.gameState.insert({
-    id: 0,
-    phase: { tag: 'Lobby' },
-    mode: { tag: 'Coop' },
-    round: 0,
-    themeTitle: '',
-    challengeId: 0,
-    host: undefined,
-    phaseStartedAt: ctx.timestamp,
-    phaseEndsAt: undefined,
-    teamScore: 0,
-  });
+  createIslandRow(ctx, MAIN_ISLAND_NAME, NO_OWNER);
 });
 
 export const onConnect = spacetimedb.clientConnected((ctx) => {
@@ -124,13 +141,14 @@ export const onConnect = spacetimedb.clientConnected((ctx) => {
   }
   const existing = ctx.db.player.identity.find(ctx.sender);
   if (existing && !existing.online) {
-    // A returning player keeps their color unless someone online has taken it.
-    const used = colorsInUse(ctx, ctx.sender);
-    const colorIndex = used.includes(existing.colorIndex)
-      ? pickColorIndex(used)
-      : existing.colorIndex;
-    ctx.db.player.identity.update({ ...existing, online: true, colorIndex });
-    ensureLobbyTimer(ctx);
+    // A returning player is back on their island, with their color if it is free.
+    ctx.db.player.identity.update({
+      ...existing,
+      online: true,
+      colorIndex: colorFor(ctx, existing.islandId, existing.colorIndex),
+    });
+    refreshPlayerCount(ctx, existing.islandId);
+    ensureLobbyTimer(ctx, existing.islandId);
   }
 });
 
@@ -139,32 +157,86 @@ export const onDisconnect = spacetimedb.clientDisconnected((ctx) => {
   const existing = ctx.db.player.identity.find(ctx.sender);
   if (existing && existing.online && !hasSession(ctx, ctx.sender)) {
     ctx.db.player.identity.update({ ...existing, online: false });
+    refreshPlayerCount(ctx, existing.islandId);
   }
 });
 
-export const join = spacetimedb.reducer(
+/** Puts the caller on an island (creating their player row), spawning near the middle. */
+function moveToIsland(ctx: Ctx, islandId: bigint, name: string): void {
+  const target = requireIsland(ctx, islandId);
+  const account = accountOf(ctx, ctx.sender);
+  // Players with an account always appear under their username.
+  const clean = account?.username ?? requireName(name);
+  const existing = ctx.db.player.identity.find(ctx.sender);
+  if (existing && existing.islandId === islandId) {
+    // Already here (another tab, or Play again): keep position and color.
+    ctx.db.player.identity.update({ ...existing, name: clean, online: true });
+    refreshPlayerCount(ctx, islandId);
+    ensureLobbyTimer(ctx, islandId);
+    return;
+  }
+  if (target.playerCount >= MAX_ISLAND_PLAYERS) {
+    throw new SenderError('That island is full');
+  }
+  const row = {
+    identity: ctx.sender,
+    islandId,
+    name: clean,
+    colorIndex: colorFor(
+      ctx,
+      islandId,
+      account?.colorIndex ?? existing?.colorIndex,
+    ),
+    online: true,
+    x: (ctx.random() - 0.5) * 6,
+    z: (ctx.random() - 0.5) * 6,
+    heading: 0,
+    moveBudget: 0,
+    lastMoveAt: ctx.timestamp,
+  };
+  if (existing) {
+    withdrawVotes(ctx, ctx.sender);
+    ctx.db.player.identity.update(row);
+    refreshPlayerCount(ctx, existing.islandId);
+  } else {
+    ctx.db.player.insert(row);
+  }
+  logActivity(ctx, row, 'joined');
+  refreshPlayerCount(ctx, islandId);
+  ensureLobbyTimer(ctx, islandId);
+}
+
+/** Enters an island; `name` is only used by guests without an account. */
+export const enterIsland = spacetimedb.reducer(
+  { islandId: t.u64(), name: t.string() },
+  (ctx, { islandId, name }) => moveToIsland(ctx, islandId, name),
+);
+
+/** Back to the main screen: the player leaves their island. */
+export const leaveIsland = spacetimedb.reducer((ctx) => {
+  const me = requirePlayer(ctx);
+  withdrawVotes(ctx, ctx.sender);
+  ctx.db.player.identity.update({ ...me, islandId: NO_ISLAND });
+  refreshPlayerCount(ctx, me.islandId);
+});
+
+/** Creates an island owned by the caller's account and takes them there. */
+export const createIsland = spacetimedb.reducer(
   { name: t.string() },
   (ctx, { name }) => {
-    // Players with an account always appear under their username.
-    const clean = accountOf(ctx, ctx.sender)?.username ?? requireName(name);
-    const existing = ctx.db.player.identity.find(ctx.sender);
-    if (existing) {
-      ctx.db.player.identity.update({ ...existing, name: clean, online: true });
-    } else {
-      const created = ctx.db.player.insert({
-        identity: ctx.sender,
-        name: clean,
-        colorIndex: pickColorIndex(colorsInUse(ctx, ctx.sender)),
-        online: true,
-        x: (ctx.random() - 0.5) * 6,
-        z: (ctx.random() - 0.5) * 6,
-        heading: 0,
-        moveBudget: 0,
-        lastMoveAt: ctx.timestamp,
-      });
-      logActivity(ctx, created, 'joined');
+    const account = requireAccount(ctx);
+    const clean = parseIslandName(name || defaultIslandName(account.username));
+    if (!clean) throw new SenderError('Island names are 3–24 characters');
+    if (
+      [...ctx.db.island.ownerAccountId.filter(account.id)].length >=
+      MAX_ISLANDS_PER_ACCOUNT
+    ) {
+      throw new SenderError(
+        'You can own up to ' + MAX_ISLANDS_PER_ACCOUNT + ' islands',
+      );
     }
-    ensureLobbyTimer(ctx);
+    const created = createIslandRow(ctx, clean, account.id);
+    moveToIsland(ctx, created.id, account.username);
   },
 );
 
@@ -209,22 +281,25 @@ export const placePiece = spacetimedb.reducer(
   { kind: t.string(), tileX: t.u8(), tileZ: t.u8(), rotation: t.u8() },
   (ctx, { kind, tileX, tileZ, rotation }) => {
     const me = requirePlayer(ctx);
-    const state = requireGameState(ctx);
+    const state = requireGameState(ctx, me.islandId);
     const key = tileKey(tileX, tileZ);
+    const cell = cellKey(me.islandId, key);
     failIf(
       checkPlacement({
         kind,
         rotation,
         tile: { x: tileX, z: tileZ },
         phase: state.phase.tag,
-        occupied: ctx.db.piece.tileKey.find(key) !== null,
+        occupied: ctx.db.piece.cellKey.find(cell) !== null,
         playerPos: me,
         reachSlack: SERVER_REACH_SLACK,
-        plot: buildRestriction(ctx, ctx.sender),
+        plot: buildRestriction(ctx, me.islandId, ctx.sender),
       }),
     );
     ctx.db.piece.insert({
       id: 0n,
+      islandId: me.islandId,
+      cellKey: cell,
       tileKey: key,
       tileX,
       tileZ,
@@ -236,21 +311,23 @@ export const placePiece = spacetimedb.reducer(
     });
     logActivity(ctx, me, 'placed', kind, tileX, tileZ);
     addStats(ctx, ctx.sender, { piecesPlaced: 1 });
-    checkEarlyCompletion(ctx);
+    checkEarlyCompletion(ctx, me.islandId);
   },
 );
 
 function requireModifiable(ctx: Ctx, tileX: number, tileZ: number) {
   const me = requirePlayer(ctx);
-  const existing = ctx.db.piece.tileKey.find(tileKey(tileX, tileZ));
+  const existing = ctx.db.piece.cellKey.find(
+    cellKey(me.islandId, tileKey(tileX, tileZ)),
+  );
   failIf(
     checkModify({
       tile: { x: tileX, z: tileZ },
-      phase: requireGameState(ctx).phase.tag,
+      phase: requireGameState(ctx, me.islandId).phase.tag,
       occupied: existing !== null,
       playerPos: me,
       reachSlack: SERVER_REACH_SLACK,
-      plot: buildRestriction(ctx, ctx.sender),
+      plot: buildRestriction(ctx, me.islandId, ctx.sender),
     }),
   );
   return { me, existing: existing! };
@@ -273,17 +350,17 @@ export const removePiece = spacetimedb.reducer(
     const { me, existing } = requireModifiable(ctx, tileX, tileZ);
     ctx.db.piece.id.delete(existing.id);
     logActivity(ctx, me, 'removed', existing.kind, tileX, tileZ);
-    checkEarlyCompletion(ctx);
+    checkEarlyCompletion(ctx, me.islandId);
   },
 );
 
-/** Any joined player can start the next round from the lobby. */
+/** Anyone on an island can start its next round from the lobby. */
 export const startRound = spacetimedb.reducer((ctx) => {
-  requirePlayer(ctx);
-  if (requireGameState(ctx).phase.tag !== 'Lobby') {
+  const me = requirePlayer(ctx);
+  if (requireGameState(ctx, me.islandId).phase.tag !== 'Lobby') {
     throw new SenderError('A round is already running');
   }
-  beginRound(ctx);
+  beginRound(ctx, me.islandId);
 });
 
 /** Fired by `phase_timer`; never callable by clients. */
@@ -294,7 +371,7 @@ export const advancePhase = spacetimedb.reducer(
     if (!ctx.sender.equals(ctx.databaseIdentity)) {
       throw new SenderError('Phases advance on their own');
     }
-    if (isCurrentTimer(ctx, timer)) advance(ctx);
+    if (isCurrentTimer(ctx, timer)) advance(ctx, timer.islandId);
   },
 );
 
@@ -313,17 +390,25 @@ export const configureTiming = spacetimedb.reducer(
   },
 );
 
-/** Admin demo control: end the current phase now. */
-export const skipPhase = spacetimedb.reducer((ctx) => {
-  requireAdmin(ctx);
-  advance(ctx);
-});
+/** Admin demo control: end the island's current phase now. */
+export const skipPhase = spacetimedb.reducer(
+  { islandId: t.u64() },
+  (ctx, { islandId }) => {
+    requireAdmin(ctx);
+    requireIsland(ctx, islandId);
+    advance(ctx, islandId);
+  },
+);
 
-/** Admin demo control: clear the board and return to an idle lobby. */
-export const resetGame = spacetimedb.reducer((ctx) => {
-  requireAdmin(ctx);
-  resetToLobby(ctx);
-});
+/** Admin demo control: clear the island's board and return it to an idle lobby. */
+export const resetGame = spacetimedb.reducer(
+  { islandId: t.u64() },
+  (ctx, { islandId }) => {
+    requireAdmin(ctx);
+    requireIsland(ctx, islandId);
+    resetToLobby(ctx, islandId);
+  },
+);
 
 /** One build idea per player; it becomes a theme-vote option for everyone. */
 export const submitIdea = spacetimedb.reducer(
@@ -343,6 +428,7 @@ export const submitIdea = spacetimedb.reducer(
     }
     ctx.db.idea.insert({
       id: 0n,
+      islandId: me.islandId,
       author: ctx.sender,
       authorName: me.name,
       text: clean,
@@ -356,19 +442,22 @@ export const submitIdea = spacetimedb.reducer(
 export const voteTheme = spacetimedb.reducer(
   { option: t.string() },
   (ctx, { option }) => {
-    requirePlayer(ctx);
-    if (requireGameState(ctx).phase.tag !== 'Lobby') {
+    const me = requirePlayer(ctx);
+    if (requireGameState(ctx, me.islandId).phase.tag !== 'Lobby') {
       throw new SenderError('Theme voting happens in the lobby');
     }
     const parsed = parseOptionKey(option);
     const valid =
       presetOptionKeys().includes(option) ||
       (parsed?.kind === 'idea' &&
-        ctx.db.idea.id.find(BigInt(parsed.id)) !== null);
+        ctx.db.idea.id.find(BigInt(parsed.id))?.islandId === me.islandId);
     if (!valid) throw new SenderError('That option is not on the ballot');
-    const existing = ctx.db.themeVote.voter.find(ctx.sender);
-    if (existing) ctx.db.themeVote.voter.update({ ...existing, option });
-    else ctx.db.themeVote.insert({ voter: ctx.sender, option });
+    const vote = { voter: ctx.sender, islandId: me.islandId, option };
+    if (ctx.db.themeVote.voter.find(ctx.sender)) {
+      ctx.db.themeVote.voter.update(vote);
+    } else {
+      ctx.db.themeVote.insert(vote);
+    }
   },
 );
 
@@ -376,18 +465,21 @@ export const voteTheme = spacetimedb.reducer(
 export const votePlot = spacetimedb.reducer(
   { plotIndex: t.u8() },
   (ctx, { plotIndex }) => {
-    requirePlayer(ctx);
-    if (requireGameState(ctx).phase.tag !== 'Voting') {
+    const me = requirePlayer(ctx);
+    if (requireGameState(ctx, me.islandId).phase.tag !== 'Voting') {
       throw new SenderError('Voting is not open');
     }
-    const target = ctx.db.plot.plotIndex.find(plotIndex);
+    const target = ctx.db.plot.plotKey.find(plotKey(me.islandId, plotIndex));
     if (!target) throw new SenderError('Nobody built on that plot');
     if (target.builder.equals(ctx.sender)) {
       throw new SenderError("You can't vote for your own build");
     }
-    const existing = ctx.db.plotVote.voter.find(ctx.sender);
-    if (existing) ctx.db.plotVote.voter.update({ ...existing, plotIndex });
-    else ctx.db.plotVote.insert({ voter: ctx.sender, plotIndex });
+    const vote = { voter: ctx.sender, islandId: me.islandId, plotIndex };
+    if (ctx.db.plotVote.voter.find(ctx.sender)) {
+      ctx.db.plotVote.voter.update(vote);
+    } else {
+      ctx.db.plotVote.insert(vote);
+    }
   },
 );
 

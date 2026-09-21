@@ -2,7 +2,7 @@ import { challengeById } from '../../spacetimedb/src/logic/challenges';
 import { evaluateChallenge } from '../../spacetimedb/src/logic/scoring';
 import type { DbConnection } from '../module_bindings';
 import type { ServerClock } from '../net/clock';
-import { myPlot } from '../net/queries';
+import { myGameState, myPlot } from '../net/queries';
 import { PlotVotePanel } from './battle';
 import { COMPACT } from './layout';
 import { LobbyPanel } from './lobby';
@@ -70,8 +70,11 @@ export class RoundHud {
 
   /** Rebuilds the card from the client cache; call whenever round tables change. */
   refresh(): void {
-    const state = this.conn.db.gameState.id.find(0);
-    if (!state) return;
+    const state = myGameState(this.conn, this.myHex);
+    if (!state) {
+      this.root.hidden = true;
+      return;
+    }
     const phase = state.phase.tag;
     const battle = state.mode.tag === 'Battle';
     const inLobby = phase === 'Lobby';
@@ -158,7 +161,7 @@ export class RoundHud {
 
   /** Updates the countdown; cheap enough to call every frame. */
   tick(): void {
-    const state = this.conn.db.gameState.id.find(0);
+    const state = myGameState(this.conn, this.myHex);
     if (!state) return;
     const endsAt = state.phaseEndsAt;
     const seconds = endsAt

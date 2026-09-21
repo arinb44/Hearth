@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import type { Identity } from 'spacetimedb';
 import { DbConnection } from '../../src/module_bindings';
+import { NO_ISLAND } from '../../spacetimedb/src/logic/islands';
 import { SPACETIME_CLI, TEST_DB, TEST_HOST } from './config';
 
 export interface TestClient {
@@ -49,6 +50,40 @@ export async function waitFor(
       throw new Error(`Timed out waiting for: ${label}`);
     await new Promise((r) => setTimeout(r, 20));
   }
+}
+
+/**
+ * Creates a fresh island for one test, which also keeps tests apart: a throwaway
+ * account creates it, steps off it again, and disconnects.
+ */
+export async function newIsland(): Promise<bigint> {
+  const owner = await connectClient();
+  try {
+    const tag = Math.random().toString(36).slice(2, 8);
+    await owner.conn.reducers.createAccount({ username: `Owner ${tag}` });
+    await owner.conn.reducers.createIsland({ name: `Test ${tag}` });
+    const islandOf = () =>
+      owner.conn.db.player.identity.find(owner.identity)?.islandId ?? NO_ISLAND;
+    await waitFor(() => islandOf() !== NO_ISLAND, 'owner on the new island');
+    const islandId = islandOf();
+    await owner.conn.reducers.leaveIsland({});
+    return islandId;
+  } finally {
+    owner.conn.disconnect();
+  }
+}
+
+/** Puts every client on the island under the given names (ignored for accounts). */
+export async function enterAll(
+  clients: TestClient[],
+  islandId: bigint,
+  name: (index: number) => string,
+): Promise<void> {
+  await Promise.all(
+    clients.map((c, i) =>
+      c.conn.reducers.enterIsland({ islandId, name: name(i) }),
+    ),
+  );
 }
 
 /** Calls a reducer as the admin (the CLI identity that published the test module). */

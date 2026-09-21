@@ -16,7 +16,7 @@ import {
 
 
 export default __t.row({
-  id: __t.u8().primaryKey(),
+  islandId: __t.u64().primaryKey().name("island_id"),
   get phase() {
     return Phase;
   },

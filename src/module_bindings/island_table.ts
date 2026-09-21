@@ -12,10 +12,8 @@ import {
 
 export default __t.row({
   id: __t.u64().primaryKey(),
-  islandId: __t.u64().name("island_id"),
-  plotKey: __t.u64().name("plot_key"),
-  builder: __t.identity(),
-  plotIndex: __t.u8().name("plot_index"),
-  builderName: __t.string().name("builder_name"),
-  colorIndex: __t.u8().name("color_index"),
+  name: __t.string(),
+  ownerAccountId: __t.u64().name("owner_account_id"),
+  playerCount: __t.u32().name("player_count"),
+  createdAt: __t.timestamp().name("created_at"),
 });

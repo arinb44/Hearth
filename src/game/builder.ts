@@ -14,7 +14,12 @@ import {
 import { PointerInput } from '../input/pointer';
 import { IS_TOUCH } from '../input/touch';
 import type { DbConnection } from '../module_bindings';
-import { buildRestriction, pieceAt } from '../net/queries';
+import {
+  buildRestriction,
+  myGameState,
+  myIslandId,
+  pieceAt,
+} from '../net/queries';
 import { createGhostModel } from '../scene/pieceModels';
 import type { World } from '../scene/world';
 import { hotkeyFor, Palette } from '../ui/palette';
@@ -177,11 +182,13 @@ export class Builder {
   }
 
   private phase(): string {
-    return this.conn.db.gameState.id.find(0)?.phase.tag ?? 'Lobby';
+    return myGameState(this.conn, this.myHex)?.phase.tag ?? 'Lobby';
   }
 
   private isOccupied(tile: Tile): boolean {
-    return pieceAt(this.conn, tile) !== undefined;
+    return (
+      pieceAt(this.conn, myIslandId(this.conn, this.myHex), tile) !== undefined
+    );
   }
 
   private checkPlace(tile: Tile, playerPos: Vec2): BuildError | null {

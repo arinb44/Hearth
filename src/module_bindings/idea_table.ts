@@ -12,6 +12,7 @@ import {
 
 export default __t.row({
   id: __t.u64().primaryKey(),
+  islandId: __t.u64().name("island_id"),
   author: __t.identity(),
   authorName: __t.string().name("author_name"),
   text: __t.string(),

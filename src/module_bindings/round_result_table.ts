@@ -16,7 +16,9 @@ import {
 
 
 export default __t.row({
-  round: __t.u32().primaryKey(),
+  id: __t.u64().primaryKey(),
+  islandId: __t.u64().name("island_id"),
+  round: __t.u32(),
   get mode() {
     return Mode;
   },
