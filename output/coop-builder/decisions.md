@@ -58,3 +58,5 @@
 | 2026-10-04 | — | When to ship M8a–M8c | Ship now / after Revision 6 | Ship now: Maincloud republish with `--delete-data` (live DB held only test/bot data) and push `main` (recommendation) |
 | 2026-10-04 | — | Revision 6: Build Battle on a private island | Private full board + tour / private board + browse / private 8×8 plot | Each builder gets a private full 24×24 board (others hidden); at Voting everyone is shown each build in turn (~10 s each), then votes (recommendation) |
 | 2026-10-04 | — | Revision 6: "don't stop building unless time is up" | Only the early finish / remove reach / bigger reach | Only the early finish goes (with the objectives); the 4.5-tile reach and the pause after time is up stay (recommendation) |
+| 2026-10-04 | — | Plan Revision 6 (stacking, Stone Wall, combo scoring, private battles + tour, Escape menu) | Approve / approve with the 8×8 battle fallback | Approve as written, including the combo table and stars at 25/50/100 |
+| 2026-10-04 | — | Docs commit | Commit and push / commit only / not yet | Commit and push |

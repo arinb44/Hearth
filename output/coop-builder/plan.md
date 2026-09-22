@@ -280,3 +280,74 @@ I'll ask about these with options and a recommendation. D1, D2, D5, D6 and D7 sh
 - **The multi-island refactor touches most of the code.** The existing 75 tests are the safety net.
 
 **Status:** Revision 5 approved on 2026-10-04.
+
+---
+
+## Revision 6 (2026-10-04): Creative building, combos, private battles, Escape menu
+
+**Request (after M8c):** fireflies stack on other pieces (not buildings); stone walls that join towers; nothing stops building until time is up; no objectives, to encourage creativity; score the total pieces with multipliers for good pairings (bridge next to water, lamp next to tile or path); co-op together, Build Battle on a private island; Escape opens a menu to exit to the main screen and see islands, lobbies and friends.
+**Choices made:** a battle builder gets a private full board, then everyone tours the builds and votes; only the early finish goes (the reach ring and the pause after time is up stay).
+
+### Requirements
+24. **Stacking fireflies.** Fireflies sit on an overlay layer. They can go on an empty tile or on top of any piece except buildings (House, Tower, Well, Bridge, Stone Wall). A building can't be placed under fireflies. At most one Fireflies per tile. Right-click removes the top piece first.
+25. **Stone Wall.** A new piece in Buildings. Each wall joins its neighbouring walls and towers (like fences), drawn low-poly in code with the stone materials. Existing hotkeys don't change.
+26. **Co-op without objectives.** The four co-op options become themes (title and blurb) with no checklist. A round always runs the full build time, so nothing ends it early. Players build together on the island's shared board.
+27. **Combo scoring.** Each piece is worth 1 point, or 2 if it has a matching partner (×2 per piece, not stacking):
+
+    | Piece | Partner |
+    |---|---|
+    | Bridge | next to Water |
+    | Lamp | next to Path or Stone Tile |
+    | Bench | next to Path or Stone Tile |
+    | Well | next to House |
+    | Flowers | next to House |
+    | Fence | next to Grass or Flowers |
+    | Stone Wall | next to Tower |
+    | Fireflies | on top of Grass, Flowers, Tree or Pine |
+
+    - "Next to" means one of the 4 side neighbours.
+    - The live score and combo count show in the round card while building. Results show the score, the stars and the top combos.
+    - Stars: ★ at 25 points, ★★ at 50, ★★★ at 100. A 3-star co-op round counts as a win in everyone's stats.
+28. **Private Build Battle.** Each builder (up to 9, everyone but the idea's host) gets a **private full 24×24 board**. While building they see only their own board, and other players are hidden.
+    - **Showcase:** then everyone is shown each build in turn (8 s each, with the builder's name), all clients in sync from the server clock.
+    - **Voting:** everyone votes; tapping a build in the ballot previews it. You can't vote for your own build.
+    - **Results:** show the winning build.
+29. **Escape menu.** Esc (or ☰ Menu) opens the menu over the game, and Esc closes it.
+    - **Top of the menu:** "Back to game" and "Exit to main menu" (leave the island).
+    - **Tabs:** Islands (each island with its live player count and whether it's in the lobby or mid-round), Friends, Saved builds, and Profile (stats and recovery code).
+    - **Main screen:** uses the same tabs.
+
+### Technical approach
+- **`piece` table:**
+  - Gains `board` (0 = the island's shared board; 1–9 = a battle builder's private board) and `layer` (0 = ground; 1 = fireflies overlay).
+  - `cell_key` packs island, board, layer and tile, and stays **unique**. The database still settles every same-cell race.
+  - Shared rules in `logic/pieces.ts`: `layerOf(kind)` and `canStackOn(kind)`. `checkPlacement` covers stacking.
+- **Scoring:**
+  - `logic/scoring.ts` is replaced by `scoreBoard(pieces)`, which returns the score, the combos found and the stars.
+  - The objective/target code and the early finish are deleted.
+  - The module scores at the end of Building, and the client shows the same number live.
+- **Battle:**
+  - The `plot` row becomes the builder's board slot.
+  - `place`, `rotate` and `remove` act on the caller's own board during a battle.
+  - New `Showcase` phase (one scheduled step per build) and `game_state.showcase_slot`.
+  - The client subscribes to `piece where island_id = X and board = mine` while building, and to all of the island's boards from Showcase on. It renders only the board being shown.
+  - Privacy comes from what each client subscribes to and renders. It is not enforced by a visibility filter (see Risks).
+- **Saved builds:** saving during a battle saves your private board. Loading always goes to the shared board. Stacked fireflies are saved and loaded too.
+- **Menu:** `src/ui/home.ts` gains tabs and the two top buttons. `src/input/desktop.ts` handles Esc and ignores it while typing in a field. The client subscribes to all `game_state` rows (one small row per island) to show each island's status.
+- **Breaking schema change:** another Maincloud publish with `--delete-data` (asked for at ship time).
+
+### Milestones
+| # | Milestone | Ends with | Est. |
+|---|---|---|---|
+| **M9a** | Stacking layer and Stone Wall: `board`/`layer`/`cell_key`, placement rules, builder ghost, wall model, saved builds | Unit + sync tests (stacking, same-cell race per layer); browser check | 1–1.5 h |
+| **M9b** | Co-op themes and combo scoring: remove objectives and the early finish; live score card; results with combos and stars | Unit tests for every combo; sync test for a scored round | 1 h |
+| **M9c** | Private battle boards, Showcase tour, voting with preview | Sync tests (privacy by subscription, showcase order, votes); two-tab browser check | 2–3 h |
+| **M9d** | Escape menu with tabs, Exit to main menu, island status | Browser check (desktop + compact layout) | 45 min |
+| **Ship** | Maincloud publish (`--delete-data`), push, README and summary | Live check | 20 min |
+
+### Risks
+- **Another wipe:** the breaking schema change means another `--delete-data` on Maincloud, so accounts made on the live site before then are lost. I'll ask before publishing.
+- **Battle privacy is client-side:** a modified client could still subscribe to other builders' boards. Enforcing it with a visibility filter would need a phase-aware filter. I've left that out to keep the risk down.
+- **Scope:** M9c is the largest milestone. If time runs short, the fallback is to hide other plots on today's 8×8 plots (about 45 min).
+
+**Status:** Revision 6 approved on 2026-10-04.

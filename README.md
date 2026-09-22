@@ -4,7 +4,9 @@ A low-poly 3D multiplayer building game, built for the MHacks "Best use of
 Spacetime" track. Players make an account (a username plus a recovery code), then
 enter the shared Main Island or an island of their own, with up to 10 players per
 island. On an island they walk around as avatars and place pieces on a tile grid.
-Each round is chosen by a live lobby vote:
+From the main screen they can add friends by username, see which island each friend
+is on and join them, and save an island's board to load again later on their own
+island. Each round is chosen by a live lobby vote:
 
 - **Co-op Challenge**: everyone builds toward a target list ("4 Houses, every House
   next to a Path…") before the clock runs out. The server scores the board, and
@@ -27,6 +29,8 @@ SpacetimeDB is the entire backend. There is no other server.
 | Live UI on every client                                      | **Subscriptions**: the client renders only what the database sends                                        |
 | Multiple tabs, reconnects                                    | Identity tokens + a private `session` table                                                               |
 | Accounts and recovery codes                                  | A private `account_secret` table, readable only through a **per-user view** (`my_recovery_code`)          |
+| Friend requests, friendships, and saved builds               | **Client visibility filters** (row-level security): each row reaches only the accounts it belongs to      |
+| Friends' online status and island                            | Presence on the `account` row, written on connect, disconnect, and island moves (never on movement)       |
 
 The game rules (placement, movement limits, scoring, vote tally) live in
 `spacetimedb/src/logic/`. The module enforces them and the client uses the same code
@@ -39,7 +43,9 @@ spacetimedb/        SpacetimeDB module (TypeScript)
   src/schema.ts     tables
   src/rounds.ts     round state machine (one per island)
   src/islands.ts    island helpers: creation, player counts
-  src/accounts.ts   account helpers: recovery codes, saved stats
+  src/accounts.ts   account helpers: recovery codes, saved stats, presence
+  src/friends.ts    friend reducers and their visibility filters
+  src/builds.ts     saved-build reducers and their visibility filter
   src/index.ts      reducers and lifecycle hooks
   src/logic/        pure, unit-tested game rules shared with the client
 src/                web client (Vite + TypeScript + Three.js)
@@ -76,6 +82,8 @@ bindings, then republish.
   your device, not shared
 - **Click**: place (or rotate an existing piece) · **Right-click**: remove
 - You can build within the white ring around your avatar.
+- **☰ Menu**: back to the main screen (your islands, friends, and saved builds)
+  without leaving your island.
 
 ## Tests
 
@@ -102,6 +110,9 @@ Load test against Maincloud: `npm run bots -- --count 9 --target maincloud --sec
 
 ## Admin controls
 
+Only the Main Island starts rounds on its own after the lobby countdown; player
+islands stay in the lobby until someone presses Start.
+
 The identity that published the module is the admin. Phase controls take an island
 id; the Main Island is `1` (list them with
 `spacetime sql coop-builder-mhacks "SELECT id, name FROM island"`):
@@ -110,7 +121,7 @@ id; the Main Island is `1` (list them with
 spacetime call coop-builder-mhacks skip_phase 1     # end the island's current phase now
 spacetime call coop-builder-mhacks reset_game 1     # clear the island's board, back to lobby
 spacetime call coop-builder-mhacks configure_timing 30 120 4 25 12
-#                        lobby build scoring voting results (seconds; lobby 0 = no auto-start; all islands)
+#                        lobby build scoring voting results (seconds, all islands; lobby 0 = no auto-start)
 ```
 
 ## Demo script (judging)
@@ -140,7 +151,11 @@ spacetime call coop-builder-mhacks configure_timing 30 120 4 25 12
 4. **Build Battle**: vote for the judge's idea. Each builder gets a plot, the judge
    hosts, everyone votes (not for themselves), and the winner is tallied
    server-side.
-5. **Resilience**: refresh a phone mid-round. It reconnects as the same player
+5. **Friends and saved builds**: a judge adds you by username and you accept; your
+   friends list shows their island live, and **Join** takes you there. On your own
+   island, save the board from ☰ Menu, change it, then **Load** the build in the
+   lobby: every player sees the board swap in one transaction.
+6. **Resilience**: refresh a phone mid-round. It reconnects as the same player
    (saved identity token) and sees the current board.
 
 **If something goes wrong**: `skip_phase` ends the current phase, and `reset_game`
