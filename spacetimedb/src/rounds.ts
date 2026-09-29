@@ -2,12 +2,13 @@
 // transaction, so all clients on an island see one consistent phase, theme, and countdown.
 import { ScheduleAt, Timestamp, type Identity } from 'spacetimedb';
 import { CHALLENGES, challengeById } from './logic/challenges';
-import { autoStartsRounds, NO_ISLAND, plotKey } from './logic/islands';
 import {
-  secondsToMicros,
-  remainingFraction,
-  type RoundTiming,
-} from './logic/phases';
+  autoStartsRounds,
+  NO_ISLAND,
+  plotKey,
+  SHARED_BOARD,
+} from './logic/islands';
+import { secondsToMicros, type RoundTiming } from './logic/phases';
 import {
   MAX_PLOTS,
   PLOT_ASSIGNMENT_ORDER,
@@ -15,7 +16,7 @@ import {
   plotOfTile,
   plotWinners,
 } from './logic/plots';
-import { evaluateChallenge, scoreRound, starsFor } from './logic/scoring';
+import { scoreBoard } from './logic/scoring';
 import {
   BATTLE_THEMES,
   optionKey,
@@ -260,7 +261,10 @@ function coopContributions(ctx: Ctx, islandId: bigint) {
   return rows.sort((a, b) => b.pieces - a.pieces);
 }
 
-/** Ends the Building phase: co-op rounds are scored, battle rounds move to voting. */
+/**
+ * Ends the Building phase when its time is up: co-op rounds score the shared board
+ * (three stars is a win for everyone there), battle rounds move to voting.
+ */
 function finishBuilding(ctx: Ctx, islandId: bigint): void {
   const state = requireGameState(ctx, islandId);
   const timing = requireTiming(ctx);
@@ -268,17 +272,12 @@ function finishBuilding(ctx: Ctx, islandId: bigint): void {
     setPhase(ctx, islandId, 'Voting', timing.votingSeconds);
     return;
   }
-  const board = [...ctx.db.piece.islandId.filter(islandId)];
-  const evaluation = evaluateChallenge(challengeById(state.challengeId), board);
-  const remaining = state.phaseEndsAt
-    ? remainingFraction(
-        state.phaseEndsAt.microsSinceUnixEpoch,
-        ctx.timestamp.microsSinceUnixEpoch,
-        timing.buildSeconds,
-      )
-    : 0;
-  const score = scoreRound(evaluation, remaining);
-  creditRound(ctx, islandId, () => evaluation.complete);
+  const board = [...ctx.db.piece.islandId.filter(islandId)].filter(
+    (p) => p.board === SHARED_BOARD,
+  );
+  const { score, stars } = scoreBoard(board);
+  const won = stars === 3;
+  creditRound(ctx, islandId, () => won);
   ctx.db.roundResult.insert({
     id: 0n,
     islandId,
@@ -287,8 +286,8 @@ function finishBuilding(ctx: Ctx, islandId: bigint): void {
     themeTitle: state.themeTitle,
     challengeId: state.challengeId,
     score,
-    completed: evaluation.complete,
-    stars: starsFor(score),
+    completed: won,
+    stars,
     contributions: coopContributions(ctx, islandId),
     endedAt: ctx.timestamp,
   });
@@ -343,16 +342,6 @@ function finishVoting(ctx: Ctx, islandId: bigint): void {
   setPhase(ctx, islandId, 'Results', requireTiming(ctx).resultsSeconds, {
     teamScore: topVotes,
   });
-}
-
-/** Called after every board change: a co-op round ends the moment it is complete. */
-export function checkEarlyCompletion(ctx: Ctx, islandId: bigint): void {
-  const state = requireGameState(ctx, islandId);
-  if (state.phase.tag !== 'Building' || state.mode.tag !== 'Coop') return;
-  const evaluation = evaluateChallenge(challengeById(state.challengeId), [
-    ...ctx.db.piece.islandId.filter(islandId),
-  ]);
-  if (evaluation.complete) finishBuilding(ctx, islandId);
 }
 
 /** During a battle build: the player's plot, or null for host and spectators. */

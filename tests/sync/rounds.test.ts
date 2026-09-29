@@ -1,11 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { DbConnection } from '../../src/module_bindings';
 import { pieceAt, resultFor } from '../../src/net/queries';
-import { worldToTile, type Tile } from '../../spacetimedb/src/logic/grid';
-import {
-  challengeById,
-  type Challenge,
-} from '../../spacetimedb/src/logic/challenges';
+import { worldToTile } from '../../spacetimedb/src/logic/grid';
+import { challengeById } from '../../spacetimedb/src/logic/challenges';
 import { TEST_TIMING } from './config';
 import {
   connectClients,
@@ -19,45 +16,6 @@ import {
 let island = 0n;
 const state = (conn: DbConnection) => conn.db.gameState.islandId.find(island)!;
 const phaseOf = (conn: DbConnection) => state(conn).phase.tag;
-
-interface Placement {
-  kind: string;
-  x: number;
-  z: number;
-}
-
-/**
- * Every piece a challenge needs, in rows of 8 around `origin` (all within reach).
- * Adjacency subjects sit directly above an anchor piece of the required kind.
- */
-function layoutFor(challenge: Challenge, origin: Tile): Placement[] {
-  const need = challenge.targets.flatMap((t) =>
-    t.type === 'count' ? Array<string>(t.min).fill(t.kinds[0]) : [],
-  );
-  const take = (kind: string) => need.splice(need.indexOf(kind), 1);
-  const out: Placement[] = [];
-  let col = 0;
-  for (const target of challenge.targets) {
-    if (target.type !== 'adjacent') continue;
-    const subjects = need.filter((k) => k === target.kind).length;
-    for (let i = 0; i < subjects; i++, col++) {
-      out.push({ kind: target.to[0], x: origin.x - 3 + col, z: origin.z });
-      out.push({ kind: target.kind, x: origin.x - 3 + col, z: origin.z + 1 });
-      take(target.to[0]);
-      take(target.kind);
-    }
-  }
-  let row = 0;
-  for (const kind of need) {
-    if (col >= 8) {
-      col = 0;
-      row -= 1;
-    }
-    out.push({ kind, x: origin.x - 3 + col, z: origin.z + row });
-    col++;
-  }
-  return out;
-}
 
 describe('round engine', () => {
   const clients: TestClient[] = [];
@@ -162,35 +120,50 @@ describe('round engine', () => {
     expect(state(watcher.conn).phaseEndsAt).toBeUndefined(); // auto-start is off in tests
   });
 
-  it('ends the round early with a time bonus when every target is met', async () => {
+  it('builds for the full time, then scores every piece with combos doubled', async () => {
     clients.push(...(await connectClients(2)));
     const [builder, watcher] = clients;
-    await enterAll(clients, island, (i) => `Finisher ${i}`);
+    await enterAll(clients, island, (i) => `Combo ${i}`);
     await builder.conn.reducers.startRound({});
     await waitFor(() => phaseOf(builder.conn) === 'Building', 'building');
-
-    const challenge = challengeById(state(builder.conn).challengeId);
-    const me = builder.conn.db.player.identity.find(builder.identity)!;
-    const origin = { x: worldToTile(me.x), z: worldToTile(me.z) };
-    for (const p of layoutFor(challenge, origin)) {
-      await builder.conn.reducers.placePiece({
-        kind: p.kind,
-        tileX: p.x,
-        tileZ: p.z,
-        rotation: 0,
-      });
-    }
-
     const round = state(builder.conn).round;
-    await waitFor(() => phaseOf(watcher.conn) === 'Scoring', 'early finish');
+
+    const me = builder.conn.db.player.identity.find(builder.identity)!;
+    const x = worldToTile(me.x);
+    const z = worldToTile(me.z);
+    // Lamp by a path (2 + 1), fireflies over a tree (2 + 1), and a lone rock (1).
+    const pieces = [
+      { kind: 'path', tileX: x, tileZ: z },
+      { kind: 'lamp', tileX: x + 1, tileZ: z },
+      { kind: 'tree', tileX: x, tileZ: z + 1 },
+      { kind: 'fireflies', tileX: x, tileZ: z + 1 },
+      { kind: 'rock', tileX: x - 1, tileZ: z - 1 },
+    ];
+    for (const p of pieces) {
+      await builder.conn.reducers.placePiece({ ...p, rotation: 0 });
+    }
+    // No objectives: the round keeps going until its time is up.
+    expect(phaseOf(watcher.conn)).toBe('Building');
+
     await waitFor(
-      () => resultFor(watcher.conn, island, round) !== undefined,
-      'result row',
+      () => phaseOf(watcher.conn) === 'Scoring',
+      'timer ends building',
+      8_000,
     );
+    for (const c of clients) {
+      await waitFor(
+        () => resultFor(c.conn, island, round) !== undefined,
+        'result row',
+      );
+    }
     const result = resultFor(watcher.conn, island, round)!;
-    expect(result.completed).toBe(true);
-    expect(result.score).toBeGreaterThan(100);
-    expect(result.stars).toBeGreaterThanOrEqual(2);
-    expect(result.contributions[0].name).toBe('Finisher 0');
+    expect(result.score).toBe(7);
+    expect(result.stars).toBe(0);
+    expect(result.completed).toBe(false);
+    expect(state(watcher.conn).teamScore).toBe(7);
+    expect(result.contributions[0]).toMatchObject({
+      name: 'Combo 0',
+      pieces: 5,
+    });
   });
 });

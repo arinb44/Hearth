@@ -1,5 +1,9 @@
 import { tileKey, type Tile } from '../../spacetimedb/src/logic/grid';
-import { cellKey, NO_ISLAND } from '../../spacetimedb/src/logic/islands';
+import {
+  cellKey,
+  NO_ISLAND,
+  SHARED_BOARD,
+} from '../../spacetimedb/src/logic/islands';
 import {
   GROUND,
   OVERLAY,
@@ -75,6 +79,17 @@ export function resultFor(
     if (r.islandId === islandId && r.round === round) return r;
   }
   return undefined;
+}
+
+/** The pieces on the shared board of an island (the local player's by default). */
+export function sharedBoard(
+  conn: DbConnection,
+  myHex: string,
+  islandId = myIslandId(conn, myHex),
+): Piece[] {
+  return [...conn.db.piece.iter()].filter(
+    (p) => p.islandId === islandId && p.board === SHARED_BOARD,
+  );
 }
 
 /** The local player's battle plot this round, if they have one. */

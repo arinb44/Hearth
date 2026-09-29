@@ -422,6 +422,10 @@ body {
   list-style: none;
 }
 
+#round-targets[hidden] {
+  display: none;
+}
+
 #round-targets li {
   position: relative;
   display: flex;

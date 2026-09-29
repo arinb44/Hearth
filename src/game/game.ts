@@ -86,7 +86,7 @@ export class Game {
         await conn.reducers.startRound({});
       },
     );
-    this.results = new ResultsView(conn);
+    this.results = new ResultsView(conn, this.myHex);
 
     conn.db.piece.onInsert((_ctx, row) => this.onPiece(row));
     conn.db.piece.onUpdate((_ctx, _old, row) => this.onPiece(row));

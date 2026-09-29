@@ -63,3 +63,4 @@
 | 2026-10-04 | — | Fireflies aimed at a building (found in the M9a browser check) | Rotate the building (old click rule) / show why it can't stack | Show the "can't share a tile with a building" message (agent fix within the approved plan; the old rule turned towers silently) |
 | 2026-10-04 | — | Commit M9a | Commit locally / not yet | Commit locally; push with the Revision 6 Maincloud publish (pushing earlier would deploy a client the live schema can't serve) |
 | 2026-10-04 | — | Local databases during Revision 6 | Wipe and republish as needed / ask each time | Wipe and republish local preview and dev DBs (`coop-builder-r6`, `coop-builder-m8c`, `coop-builder-preview`, `coop-builder`) as needed; Maincloud still needs its own approval |
+| 2026-10-04 | — | Commit M9b | Commit and continue / commit and stop / not yet | Commit locally and continue with M9c |

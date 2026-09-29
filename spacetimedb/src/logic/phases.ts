@@ -32,13 +32,3 @@ export function isValidTiming(timing: RoundTiming): boolean {
 export function secondsToMicros(seconds: number): bigint {
   return BigInt(Math.round(seconds * 1_000_000));
 }
-
-/** Fraction of `totalSeconds` still left at `nowMicros`, clamped to [0, 1]. */
-export function remainingFraction(
-  endsAtMicros: bigint,
-  nowMicros: bigint,
-  totalSeconds: number,
-): number {
-  const remaining = Number(endsAtMicros - nowMicros) / 1_000_000;
-  return Math.min(1, Math.max(0, remaining / totalSeconds));
-}

@@ -59,7 +59,6 @@ import {
   advance,
   beginRound,
   buildRestriction,
-  checkEarlyCompletion,
   ensureLobbyTimer,
   isCurrentTimer,
   requireGameState,
@@ -328,7 +327,6 @@ export const placePiece = spacetimedb.reducer(
     });
     logActivity(ctx, me, 'placed', kind, tileX, tileZ);
     addStats(ctx, ctx.sender, { piecesPlaced: 1 });
-    checkEarlyCompletion(ctx, me.islandId);
   },
 );
 
@@ -374,7 +372,6 @@ export const removePiece = spacetimedb.reducer(
     const { me, existing } = requireModifiable(ctx, tileX, tileZ, 'remove');
     ctx.db.piece.id.delete(existing.id);
     logActivity(ctx, me, 'removed', existing.kind, tileX, tileZ);
-    checkEarlyCompletion(ctx, me.islandId);
   },
 );
 

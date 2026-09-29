@@ -1,5 +1,6 @@
+import { scoreBoard } from '../../spacetimedb/src/logic/scoring';
 import type { DbConnection } from '../module_bindings';
-import { resultFor } from '../net/queries';
+import { resultFor, sharedBoard } from '../net/queries';
 import type { RoundResult } from '../module_bindings/types';
 import { colorDot } from './colors';
 
@@ -20,15 +21,16 @@ export class ResultsView {
   private readonly root = document.getElementById('results')!;
   private bannerTimer: number | undefined;
 
-  constructor(private readonly conn: DbConnection) {}
+  constructor(
+    private readonly conn: DbConnection,
+    private readonly myHex: string,
+  ) {}
 
   /** Call when the island's phase changes. */
   onPhase(phase: string, round: number, islandId: bigint): void {
     const result = resultFor(this.conn, islandId, round);
     if (phase === 'Scoring') {
-      this.showBanner(
-        result?.completed ? 'Challenge complete! 🎉' : "Time's up!",
-      );
+      this.showBanner(result?.completed ? 'Three stars! 🎉' : "Time's up!");
     } else if (phase === 'Voting') {
       this.showBanner("Time's up! Vote for the best build");
     }
@@ -80,9 +82,19 @@ export class ResultsView {
       headline.className = 'score';
       headline.textContent = `${result.score} points`;
       headline.prepend(stars);
-      note.textContent = result.completed
-        ? 'Every target met, with a time bonus!'
-        : 'Targets partly met. Faster teamwork next time!';
+      // The board stays up until the next round starts, so its combos are still here.
+      const { combos } = scoreBoard(
+        sharedBoard(this.conn, this.myHex, result.islandId),
+      );
+      const best = combos
+        .slice(0, 3)
+        .map((c) => `${c.label} ×${c.count}`)
+        .join(' · ');
+      note.textContent =
+        (result.completed ? 'Three stars: a win for everyone! ' : '') +
+        (best
+          ? `Combos: ${best}`
+          : 'No combos this time: pair a lamp with a path!');
     }
 
     const list = document.createElement('ul');
@@ -99,7 +111,7 @@ export class ResultsView {
     this.root
       .querySelector('.card')!
       .replaceChildren(title, headline, note, list);
-    const celebrate = battle ? result.score > 0 : result.completed;
+    const celebrate = battle ? result.score > 0 : result.stars > 0;
     this.root
       .querySelector('.confetti')!
       .replaceChildren(...(celebrate ? confetti() : []));

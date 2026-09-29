@@ -1,8 +1,12 @@
 import { challengeById } from '../../spacetimedb/src/logic/challenges';
-import { evaluateChallenge } from '../../spacetimedb/src/logic/scoring';
+import {
+  pointsToNextStar,
+  scoreBoard,
+  STAR_THRESHOLDS,
+} from '../../spacetimedb/src/logic/scoring';
 import type { DbConnection } from '../module_bindings';
 import type { ServerClock } from '../net/clock';
-import { myGameState, myPlot } from '../net/queries';
+import { myGameState, myPlot, sharedBoard } from '../net/queries';
 import { PlotVotePanel } from './battle';
 import { COMPACT } from './layout';
 import { LobbyPanel } from './lobby';
@@ -22,9 +26,32 @@ function formatClock(seconds: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+/** One line of the co-op score card: a label, a value, and an optional bar. */
+function scoreLine(
+  label: string,
+  value: string,
+  completion: number | null,
+  done = false,
+): HTMLLIElement {
+  const li = document.createElement('li');
+  li.classList.toggle('done', done);
+  const text = document.createElement('span');
+  text.textContent = label;
+  const count = document.createElement('span');
+  count.className = 'count';
+  count.textContent = value;
+  li.append(text, count);
+  if (completion !== null) {
+    const bar = document.createElement('i');
+    bar.style.width = `${Math.round(completion * 100)}%`;
+    li.append(bar);
+  }
+  return li;
+}
+
 /**
- * Top-center round card. Lobby: the theme ballot and idea input. Co-op: the challenge
- * and its live checklist. Battle: your role, then the best-build vote.
+ * Top-center round card. Lobby: the theme ballot and idea input. Co-op: the theme,
+ * the live score, and the combos found. Battle: your role, then the best-build vote.
  */
 export class RoundHud {
   private readonly root = document.getElementById('round')!;
@@ -32,7 +59,7 @@ export class RoundHud {
   private readonly timerEl = document.getElementById('round-timer')!;
   private readonly titleEl = document.getElementById('round-title')!;
   private readonly blurbEl = document.getElementById('round-blurb')!;
-  private readonly targetsEl = document.getElementById('round-targets')!;
+  private readonly scoreEl = document.getElementById('round-targets')!;
   private readonly optionsEl = document.getElementById('round-options')!;
   private readonly votesEl = document.getElementById('round-votes')!;
   private readonly lobbyEl = document.getElementById('round-lobby')!;
@@ -92,13 +119,13 @@ export class RoundHud {
 
     this.lobbyEl.hidden = !inLobby;
     this.optionsEl.hidden = !inLobby;
-    this.targetsEl.hidden = inLobby || battle;
+    this.scoreEl.hidden = inLobby || battle;
     this.votesEl.hidden = !(battle && phase === 'Voting');
 
     if (inLobby) {
       this.titleEl.textContent = 'Vote for the next round';
       this.blurbEl.textContent =
-        'Pick a co-op challenge or a battle theme, or suggest your own idea.';
+        'Build together on a co-op theme, battle on your own island, or suggest an idea.';
       this.lobby.render();
     } else if (battle) {
       this.renderBattle(phase, state.themeTitle, state.host?.toHexString());
@@ -108,28 +135,31 @@ export class RoundHud {
     this.tick();
   }
 
+  /** The theme, the live score with progress to the next star, and the combos found. */
   private renderCoop(challengeId: number, title: string): void {
-    const challenge = challengeById(challengeId);
     this.titleEl.textContent = title;
-    this.blurbEl.textContent = challenge.blurb;
-    const evaluation = evaluateChallenge(challenge, [
-      ...this.conn.db.piece.iter(),
-    ]);
-    this.targetsEl.replaceChildren(
-      ...evaluation.targets.map((t) => {
-        const li = document.createElement('li');
-        li.classList.toggle('done', t.done);
-        const label = document.createElement('span');
-        label.textContent = t.label;
-        const count = document.createElement('span');
-        count.className = 'count';
-        count.textContent = t.done ? '✓' : `${t.value}/${t.goal}`;
-        const bar = document.createElement('i');
-        bar.style.width = `${Math.round(t.completion * 100)}%`;
-        li.append(label, count, bar);
-        return li;
-      }),
+    this.blurbEl.textContent = challengeById(challengeId).blurb;
+    const { score, stars, combos } = scoreBoard(
+      sharedBoard(this.conn, this.myHex),
     );
+    const toNext = pointsToNextStar(score);
+    const from = STAR_THRESHOLDS[stars - 1] ?? 0;
+    const to = STAR_THRESHOLDS[stars] ?? from;
+    const lines = [
+      scoreLine(
+        toNext === null ? 'Three stars!' : `Next ★ in ${toNext}`,
+        `${score} pts ${'★'.repeat(stars)}`,
+        toNext === null ? 1 : (score - from) / (to - from),
+        toNext === null,
+      ),
+      ...combos.map((c) => scoreLine(c.label, `×2 · ${c.count}`, null, true)),
+    ];
+    if (combos.length === 0) {
+      lines.push(
+        scoreLine('Pairs score double: try a lamp by a path', '', null),
+      );
+    }
+    this.scoreEl.replaceChildren(...lines);
   }
 
   private renderBattle(
