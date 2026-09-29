@@ -60,3 +60,6 @@
 | 2026-10-04 | — | Revision 6: "don't stop building unless time is up" | Only the early finish / remove reach / bigger reach | Only the early finish goes (with the objectives); the 4.5-tile reach and the pause after time is up stay (recommendation) |
 | 2026-10-04 | — | Plan Revision 6 (stacking, Stone Wall, combo scoring, private battles + tour, Escape menu) | Approve / approve with the 8×8 battle fallback | Approve as written, including the combo table and stars at 25/50/100 |
 | 2026-10-04 | — | Docs commit | Commit and push / commit only / not yet | Commit and push |
+| 2026-10-04 | — | Fireflies aimed at a building (found in the M9a browser check) | Rotate the building (old click rule) / show why it can't stack | Show the "can't share a tile with a building" message (agent fix within the approved plan; the old rule turned towers silently) |
+| 2026-10-04 | — | Commit M9a | Commit locally / not yet | Commit locally; push with the Revision 6 Maincloud publish (pushing earlier would deploy a client the live schema can't serve) |
+| 2026-10-04 | — | Local databases during Revision 6 | Wipe and republish as needed / ask each time | Wipe and republish local preview and dev DBs (`coop-builder-r6`, `coop-builder-m8c`, `coop-builder-preview`, `coop-builder`) as needed; Maincloud still needs its own approval |

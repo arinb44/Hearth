@@ -10,6 +10,7 @@ import {
   PIECE_KINDS,
   type BuildError,
   type PieceKind,
+  type TileContents,
 } from '../../spacetimedb/src/logic/pieces';
 import { PointerInput } from '../input/pointer';
 import { IS_TOUCH } from '../input/touch';
@@ -18,7 +19,7 @@ import {
   buildRestriction,
   myGameState,
   myIslandId,
-  pieceAt,
+  tileContents,
 } from '../net/queries';
 import { createGhostModel } from '../scene/pieceModels';
 import type { World } from '../scene/world';
@@ -148,11 +149,11 @@ export class Builder {
       return;
     }
 
-    const occupied = this.isOccupied(tile);
-    const error =
-      occupied || this.removeMode
-        ? this.checkModify(tile, pos)
-        : this.checkPlace(tile, pos);
+    const contents = this.contents(tile);
+    const placing = !this.removeMode && this.placesOn(contents, tile, pos);
+    const error = placing
+      ? this.checkPlace(tile, pos, contents)
+      : this.checkModify(tile, pos, contents);
     const color = error ? INVALID : VALID;
 
     this.outline.visible = true;
@@ -160,7 +161,7 @@ export class Builder {
     (this.outline.material as THREE.LineBasicMaterial).color.copy(color);
 
     const ghost = this.ghost!;
-    ghost.visible = !occupied && !this.removeMode;
+    ghost.visible = placing;
     ghost.position.copy(this.outline.position);
     ghost.rotation.y = (this.rotation * Math.PI) / 2;
     this.ghostMaterial.color.copy(color);
@@ -185,45 +186,67 @@ export class Builder {
     return myGameState(this.conn, this.myHex)?.phase.tag ?? 'Lobby';
   }
 
-  private isOccupied(tile: Tile): boolean {
-    return (
-      pieceAt(this.conn, myIslandId(this.conn, this.myHex), tile) !== undefined
-    );
+  private contents(tile: Tile): TileContents {
+    return tileContents(this.conn, myIslandId(this.conn, this.myHex), tile);
   }
 
-  private checkPlace(tile: Tile, playerPos: Vec2): BuildError | null {
+  /**
+   * Whether a click places the selected piece (rather than rotating what is there):
+   * on an empty tile, or wherever the piece can stack, like fireflies over a tree.
+   * Fireflies aimed at a building also count, so the player sees why they can't go
+   * there instead of the building quietly turning.
+   */
+  private placesOn(contents: TileContents, tile: Tile, pos: Vec2): boolean {
+    if (!contents.ground && !contents.overlay) return true;
+    const error = this.checkPlace(tile, pos, contents);
+    return error === null || error === 'cannot_stack';
+  }
+
+  private checkPlace(
+    tile: Tile,
+    playerPos: Vec2,
+    contents: TileContents,
+  ): BuildError | null {
     return checkPlacement({
       kind: this.selected,
       rotation: this.rotation,
       tile,
       phase: this.phase(),
-      occupied: this.isOccupied(tile),
+      contents,
       playerPos,
       plot: buildRestriction(this.conn, this.myHex),
     });
   }
 
-  private checkModify(tile: Tile, playerPos: Vec2): BuildError | null {
+  private checkModify(
+    tile: Tile,
+    playerPos: Vec2,
+    contents: TileContents,
+  ): BuildError | null {
     return checkModify({
       tile,
       phase: this.phase(),
-      occupied: this.isOccupied(tile),
+      contents,
       playerPos,
       plot: buildRestriction(this.conn, this.myHex),
     });
   }
 
-  /** Click or tap: place on an empty tile, rotate an existing piece (or remove, in remove mode). */
+  /**
+   * Click or tap: place the selected piece where it fits, otherwise rotate the piece
+   * already there (or remove, in remove mode).
+   */
   private primary(tile: Tile): void {
     if (this.removeMode) return this.remove(tile);
     const pos = this.playerPos();
     if (!this.enabled || !pos) return;
-    const occupied = this.isOccupied(tile);
-    const error = occupied
-      ? this.checkModify(tile, pos)
-      : this.checkPlace(tile, pos);
+    const contents = this.contents(tile);
+    const placing = this.placesOn(contents, tile, pos);
+    const error = placing
+      ? this.checkPlace(tile, pos, contents)
+      : this.checkModify(tile, pos, contents);
     if (error) return this.toast.show(BUILD_ERROR_MESSAGES[error]);
-    const call = occupied
+    const call = !placing
       ? this.conn.reducers.rotatePiece({ tileX: tile.x, tileZ: tile.z })
       : this.conn.reducers.placePiece({
           kind: this.selected,
@@ -237,7 +260,7 @@ export class Builder {
   private remove(tile: Tile): void {
     const pos = this.playerPos();
     if (!this.enabled || !pos) return;
-    const error = this.checkModify(tile, pos);
+    const error = this.checkModify(tile, pos, this.contents(tile));
     if (error) return this.toast.show(BUILD_ERROR_MESSAGES[error]);
     this.conn.reducers
       .removePiece({ tileX: tile.x, tileZ: tile.z })

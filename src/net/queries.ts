@@ -1,5 +1,10 @@
 import { tileKey, type Tile } from '../../spacetimedb/src/logic/grid';
 import { cellKey, NO_ISLAND } from '../../spacetimedb/src/logic/islands';
+import {
+  GROUND,
+  OVERLAY,
+  type TileContents,
+} from '../../spacetimedb/src/logic/pieces';
 import type { DbConnection } from '../module_bindings';
 import type {
   GameState,
@@ -31,17 +36,33 @@ export function myGameState(
 }
 
 /**
- * The piece on an island's tile, from the client cache. `cell_key` is unique, and at
- * runtime the client index is a unique index with `find` (no `filter`), but the
- * generated typings declare it as a range index, so narrow it to what the runtime provides.
+ * The piece on one layer of an island's tile, from the client cache. `cell_key` is
+ * unique, and at runtime the client index is a unique index with `find` (no
+ * `filter`), but the generated typings declare it as a range index, so narrow it to
+ * what the runtime provides.
  */
 export function pieceAt(
   conn: DbConnection,
   islandId: bigint,
   tile: Tile,
+  layer = GROUND,
 ): Piece | undefined {
   const index = conn.db.piece.cellKey as unknown as UniqueLookup;
-  return index.find(cellKey(islandId, tileKey(tile.x, tile.z))) ?? undefined;
+  return (
+    index.find(cellKey(islandId, tileKey(tile.x, tile.z), layer)) ?? undefined
+  );
+}
+
+/** The kinds on a tile's ground and overlay layers, for the shared build rules. */
+export function tileContents(
+  conn: DbConnection,
+  islandId: bigint,
+  tile: Tile,
+): TileContents {
+  return {
+    ground: pieceAt(conn, islandId, tile, GROUND)?.kind,
+    overlay: pieceAt(conn, islandId, tile, OVERLAY)?.kind,
+  };
 }
 
 /** The result row for an island's round, once it has been recorded. */

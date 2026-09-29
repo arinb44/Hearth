@@ -154,6 +154,8 @@ export type PhaseTimer = __Infer<typeof PhaseTimer>;
 export const Piece = __t.object("Piece", {
   id: __t.u64(),
   islandId: __t.u64(),
+  board: __t.u8(),
+  layer: __t.u8(),
   cellKey: __t.u64(),
   tileKey: __t.u32(),
   tileX: __t.u8(),

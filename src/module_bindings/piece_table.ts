@@ -13,6 +13,8 @@ import {
 export default __t.row({
   id: __t.u64().primaryKey(),
   islandId: __t.u64().name("island_id"),
+  board: __t.u8(),
+  layer: __t.u8(),
   cellKey: __t.u64().name("cell_key"),
   tileKey: __t.u32().name("tile_key"),
   tileX: __t.u8().name("tile_x"),

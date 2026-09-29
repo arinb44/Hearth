@@ -23,6 +23,7 @@ const ICONS: Record<PieceKind, string> = {
   grass: '🌿',
   fireflies: '✨',
   bench: '🪑',
+  wall: '🧱',
 };
 
 /** Hotkey for the n-th piece in PIECE_KINDS: 1–9, then 0; later pieces have none. */

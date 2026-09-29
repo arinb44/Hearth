@@ -127,13 +127,17 @@ const session = table(
   },
 );
 
-// Every island's board. `cellKey` (island and tile) is unique, so the database itself
-// guarantees at most one piece per tile even when several players click it at once.
+// Every island's pieces. `board` 0 is the island's shared board; `layer` 0 is the
+// ground and 1 the fireflies overlay. `cellKey` (island, board, layer, tile) is unique,
+// so the database itself guarantees one piece per tile and layer even when several
+// players click the same tile at once.
 const piece = table(
   { name: 'piece', public: true },
   {
     id: t.u64().primaryKey().autoInc(),
     islandId: t.u64().index('btree'),
+    board: t.u8(),
+    layer: t.u8(),
     cellKey: t.u64().unique(),
     tileKey: t.u32(),
     tileX: t.u8(),

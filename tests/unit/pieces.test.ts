@@ -6,7 +6,12 @@ import {
   canBuildInPhase,
   checkModify,
   checkPlacement,
+  GROUND,
+  isBuilding,
   isPieceKind,
+  layerOf,
+  modifyTarget,
+  OVERLAY,
   PIECE_CATEGORIES,
   PIECE_KINDS,
   PIECE_LABELS,
@@ -21,7 +26,7 @@ const okPlacement = {
   rotation: 0,
   tile: center,
   phase: 'Building',
-  occupied: false,
+  contents: {},
   playerPos: standingOnCenter,
 };
 
@@ -91,7 +96,9 @@ describe('checkPlacement', () => {
   });
 
   it('rejects occupied tiles', () => {
-    expect(checkPlacement({ ...okPlacement, occupied: true })).toBe('occupied');
+    expect(
+      checkPlacement({ ...okPlacement, contents: { ground: 'tree' } }),
+    ).toBe('occupied');
   });
 
   it('only allows building in the Lobby and Building phases', () => {
@@ -127,7 +134,7 @@ describe('checkModify', () => {
   const okModify = {
     tile: center,
     phase: 'Lobby',
-    occupied: true,
+    contents: { ground: 'tree' },
     playerPos: standingOnCenter,
   };
 
@@ -136,11 +143,68 @@ describe('checkModify', () => {
   });
 
   it('rejects empty tiles, wrong phase, and distant tiles', () => {
-    expect(checkModify({ ...okModify, occupied: false })).toBe('empty');
+    expect(checkModify({ ...okModify, contents: {} })).toBe('empty');
     expect(checkModify({ ...okModify, phase: 'Results' })).toBe('wrong_phase');
     expect(checkModify({ ...okModify, playerPos: { x: 100, z: 100 } })).toBe(
       'out_of_reach',
     );
+  });
+});
+
+describe('stacking', () => {
+  const fireflies = { ...okPlacement, kind: 'fireflies' };
+
+  it('puts fireflies on their own layer and everything else on the ground', () => {
+    expect(layerOf('fireflies')).toBe(OVERLAY);
+    expect(layerOf('tree')).toBe(GROUND);
+    expect(layerOf('wall')).toBe(GROUND);
+    expect(['house', 'tower', 'wall', 'well', 'bridge'].every(isBuilding)).toBe(
+      true,
+    );
+    expect(isBuilding('tree')).toBe(false);
+  });
+
+  it('lets fireflies float over any piece but a building', () => {
+    for (const ground of [
+      'tree',
+      'pine',
+      'flowers',
+      'grass',
+      'path',
+      'water',
+    ]) {
+      expect(checkPlacement({ ...fireflies, contents: { ground } })).toBeNull();
+    }
+    for (const ground of ['house', 'tower', 'wall', 'well', 'bridge']) {
+      expect(checkPlacement({ ...fireflies, contents: { ground } })).toBe(
+        'cannot_stack',
+      );
+    }
+    expect(
+      checkPlacement({
+        ...fireflies,
+        contents: { ground: 'tree', overlay: 'fireflies' },
+      }),
+    ).toBe('occupied');
+  });
+
+  it('lets ground pieces, but not buildings, go under fireflies', () => {
+    const under = { overlay: 'fireflies' };
+    expect(
+      checkPlacement({ ...okPlacement, kind: 'tree', contents: under }),
+    ).toBeNull();
+    expect(checkPlacement({ ...okPlacement, contents: under })).toBe(
+      'cannot_stack',
+    );
+  });
+
+  it('rotates the ground piece and removes the top piece first', () => {
+    const both = { ground: 'tree', overlay: 'fireflies' };
+    expect(modifyTarget(both, 'rotate')).toBe(GROUND);
+    expect(modifyTarget(both, 'remove')).toBe(OVERLAY);
+    expect(modifyTarget({ overlay: 'fireflies' }, 'rotate')).toBe(OVERLAY);
+    expect(modifyTarget({ ground: 'tree' }, 'remove')).toBe(GROUND);
+    expect(modifyTarget({}, 'remove')).toBeNull();
   });
 });
 

@@ -9,7 +9,8 @@ import {
   placeablePieces,
 } from './logic/builds';
 import { tileKey } from './logic/grid';
-import { cellKey } from './logic/islands';
+import { cellKey, SHARED_BOARD } from './logic/islands';
+import { layerOf } from './logic/pieces';
 import { requireGameState } from './rounds';
 import { spacetimedb, type Ctx } from './schema';
 
@@ -44,7 +45,8 @@ export const saveBuild = spacetimedb.reducer(
       );
     }
     const pieces = [...ctx.db.piece.islandId.filter(me.islandId)]
-      .sort((a, b) => a.tileKey - b.tileKey)
+      .filter((p) => p.board === SHARED_BOARD)
+      .sort((a, b) => a.tileKey - b.tileKey || a.layer - b.layer)
       .map(({ kind, tileX, tileZ, rotation }) => ({
         kind,
         tileX,
@@ -82,10 +84,13 @@ export const loadBuild = spacetimedb.reducer(
     }
     for (const p of placeablePieces(build.pieces)) {
       const key = tileKey(p.tileX, p.tileZ);
+      const layer = layerOf(p.kind);
       ctx.db.piece.insert({
         id: 0n,
         islandId: me.islandId,
-        cellKey: cellKey(me.islandId, key),
+        board: SHARED_BOARD,
+        layer,
+        cellKey: cellKey(me.islandId, key, layer),
         tileKey: key,
         tileX: p.tileX,
         tileZ: p.tileZ,

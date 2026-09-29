@@ -2,9 +2,11 @@ import * as THREE from 'three';
 
 // Pieces that link up with their neighbours: each tile looks at the four tiles
 // around it and draws toward the ones it connects to, so fences join at corners and
-// crossings, paths and water form continuous roads and ponds, and bridges line up.
+// crossings, paths and water form continuous roads and ponds, bridges line up, and
+// stone walls run between towers.
 
-export type ConnectiveKind = 'fence' | 'path' | 'water' | 'tile' | 'bridge';
+export type ConnectiveKind =
+  'fence' | 'path' | 'water' | 'tile' | 'bridge' | 'wall';
 
 /** The kind on the tile at an offset from this one, if any. */
 export type NeighbourLookup = (dx: number, dz: number) => string | undefined;
@@ -23,6 +25,7 @@ const CONNECTIVE = new Set<string>([
   'water',
   'tile',
   'bridge',
+  'wall',
 ]);
 const WALKABLE = ['path', 'bridge', 'tile'];
 const WET = ['water', 'bridge'];
@@ -86,6 +89,11 @@ const geometry = {
   bridgeRailX: new THREE.BoxGeometry(1, 0.05, 0.05),
   bridgeRailZ: new THREE.BoxGeometry(0.05, 0.05, 1),
   bridgePost: new THREE.BoxGeometry(0.07, 0.3, 0.07),
+  pier: new THREE.BoxGeometry(0.36, 0.86, 0.36),
+  pierCap: new THREE.BoxGeometry(0.42, 0.08, 0.42),
+  wallX: new THREE.BoxGeometry(0.5, 0.62, 0.26),
+  wallZ: new THREE.BoxGeometry(0.26, 0.62, 0.5),
+  merlon: new THREE.BoxGeometry(0.13, 0.13, 0.28),
 };
 
 function mesh(
@@ -183,6 +191,40 @@ function fence(at: NeighbourLookup, rotation: number): THREE.Group {
       mesh(rail, materials.wood, x, 0.13, z),
       mesh(rail, materials.wood, x, 0.28, z),
     );
+  }
+  return group;
+}
+
+/**
+ * A stone wall: a pier with a crenellated section toward each neighbouring wall or
+ * tower, so walls run between towers like a castle curtain wall.
+ */
+function wall(at: NeighbourLookup, rotation: number): THREE.Group {
+  const group = new THREE.Group();
+  group.add(
+    mesh(geometry.pier, materials.stoneDark, 0, 0.43, 0),
+    mesh(geometry.pierCap, materials.stone, 0, 0.9, 0),
+  );
+  for (const n of fenceArms(maskOf(at, ['wall', 'tower']), rotation)) {
+    const alongX = n.dx !== 0;
+    group.add(
+      mesh(
+        alongX ? geometry.wallX : geometry.wallZ,
+        materials.stone,
+        n.dx * 0.25,
+        0.31,
+        n.dz * 0.25,
+      ),
+    );
+    const merlon = mesh(
+      geometry.merlon,
+      materials.stoneDark,
+      n.dx * 0.32,
+      0.68,
+      n.dz * 0.32,
+    );
+    if (alongX) merlon.rotation.y = Math.PI / 2;
+    group.add(merlon);
   }
   return group;
 }
@@ -295,5 +337,7 @@ export function createConnectedModel(
       return tile();
     case 'bridge':
       return bridge(at, rotation);
+    case 'wall':
+      return wall(at, rotation);
   }
 }

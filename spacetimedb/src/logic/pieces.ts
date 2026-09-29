@@ -22,6 +22,7 @@ export const PIECE_KINDS = [
   'grass',
   'fireflies',
   'bench',
+  'wall',
 ] as const;
 export type PieceKind = (typeof PIECE_KINDS)[number];
 
@@ -42,11 +43,15 @@ export const PIECE_LABELS: Record<PieceKind, string> = {
   grass: 'Grass',
   fireflies: 'Fireflies',
   bench: 'Bench',
+  wall: 'Stone Wall',
 };
+
+/** Buildings fill their tile: nothing stacks on them. */
+const BUILDINGS: PieceKind[] = ['house', 'tower', 'wall', 'well', 'bridge'];
 
 /** Palette groups, in display order; every kind appears in exactly one. */
 export const PIECE_CATEGORIES: { name: string; kinds: PieceKind[] }[] = [
-  { name: 'Buildings', kinds: ['house', 'tower', 'well', 'bridge'] },
+  { name: 'Buildings', kinds: BUILDINGS },
   { name: 'Greenery', kinds: ['tree', 'pine', 'flowers', 'grass'] },
   { name: 'Furniture', kinds: ['fence', 'lamp', 'bench'] },
   {
@@ -54,6 +59,24 @@ export const PIECE_CATEGORIES: { name: string; kinds: PieceKind[] }[] = [
     kinds: ['path', 'tile', 'water', 'rock', 'fireflies'],
   },
 ];
+
+/** Layers of a tile: one ground piece, and fireflies floating above it. */
+export const GROUND = 0;
+export const OVERLAY = 1;
+
+export function layerOf(kind: string): number {
+  return kind === 'fireflies' ? OVERLAY : GROUND;
+}
+
+export function isBuilding(kind: string): boolean {
+  return (BUILDINGS as string[]).includes(kind);
+}
+
+/** What stands on a tile: the ground piece's kind and the overlay's, if any. */
+export interface TileContents {
+  ground?: string;
+  overlay?: string;
+}
 
 /** How far (world units) from your avatar you can build. */
 export const BUILD_REACH = 4.5;
@@ -65,6 +88,7 @@ export type BuildError =
   | 'unknown_kind'
   | 'bad_rotation'
   | 'occupied'
+  | 'cannot_stack'
   | 'empty'
   | 'out_of_reach'
   | 'wrong_phase'
@@ -76,6 +100,7 @@ export const BUILD_ERROR_MESSAGES: Record<BuildError, string> = {
   unknown_kind: 'Unknown piece',
   bad_rotation: 'Invalid rotation',
   occupied: 'That tile is already taken',
+  cannot_stack: 'Fireflies can’t share a tile with a building',
   empty: 'Nothing to change on that tile',
   out_of_reach: 'Walk closer to build there',
   wrong_phase: 'Building is paused right now',
@@ -100,8 +125,7 @@ export function withinReach(pos: Vec2, tile: Tile, slack = 0): boolean {
 interface TileAction {
   tile: Tile;
   phase: string;
-  /** Whether a piece already stands on the tile. */
-  occupied: boolean;
+  contents: TileContents;
   playerPos: Vec2;
   reachSlack?: number;
   /**
@@ -135,10 +159,33 @@ export function checkPlacement(
   ) {
     return 'bad_rotation';
   }
-  return checkTileAction(action) ?? (action.occupied ? 'occupied' : null);
+  return checkTileAction(action) ?? stackError(action.kind, action.contents);
+}
+
+/** Each layer holds one piece, and fireflies never share a tile with a building. */
+function stackError(kind: string, tile: TileContents): BuildError | null {
+  if (layerOf(kind) === OVERLAY) {
+    if (tile.overlay) return 'occupied';
+    return tile.ground && isBuilding(tile.ground) ? 'cannot_stack' : null;
+  }
+  if (tile.ground) return 'occupied';
+  return tile.overlay && isBuilding(kind) ? 'cannot_stack' : null;
 }
 
 /** Rules for rotating or removing an existing piece. */
 export function checkModify(action: TileAction): BuildError | null {
-  return checkTileAction(action) ?? (action.occupied ? null : 'empty');
+  const { ground, overlay } = action.contents;
+  return checkTileAction(action) ?? (ground || overlay ? null : 'empty');
+}
+
+/** Rotating turns the ground piece; removing takes the top piece first. */
+export function modifyTarget(
+  tile: TileContents,
+  action: 'rotate' | 'remove',
+): number | null {
+  const order = action === 'rotate' ? [GROUND, OVERLAY] : [OVERLAY, GROUND];
+  return (
+    order.find((layer) => (layer === GROUND ? tile.ground : tile.overlay)) ??
+    null
+  );
 }

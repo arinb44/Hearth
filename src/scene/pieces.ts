@@ -5,7 +5,9 @@ import {
   tileToWorld,
 } from '../../spacetimedb/src/logic/grid';
 import {
+  GROUND,
   isPieceKind,
+  OVERLAY,
   type PieceKind,
 } from '../../spacetimedb/src/logic/pieces';
 import type { Piece } from '../module_bindings/types';
@@ -13,6 +15,13 @@ import { createConnectedModel, isConnective } from './connectedModels';
 import { createPieceModel } from './pieceModels';
 
 const POP_SECONDS = 0.35;
+
+/** How far fireflies rise over a tall piece on the same tile, so they circle its top. */
+const OVERLAY_LIFT: Partial<Record<PieceKind, number>> = {
+  tree: 0.55,
+  pine: 0.6,
+  lamp: 0.4,
+};
 
 function easeOutBack(t: number): number {
   const c = 1.7;
@@ -24,16 +33,23 @@ interface Placed {
   id: bigint;
   object: THREE.Group;
   kind: PieceKind;
+  layer: number;
   rotation: number;
   tileX: number;
   tileZ: number;
   age: number;
 }
 
+/** One entry per tile and layer. */
+function slot(layer: number, key: number): number {
+  return layer * 1000 + key;
+}
+
 /**
- * Renders the `piece` table: one model per row, keyed by tile. Connective pieces
- * (fences, paths, water, tiles, bridges) are drawn from their neighbourhood, so
- * placing or removing one also redraws its neighbours.
+ * Renders the `piece` table: one model per row, keyed by tile and layer (ground, or
+ * fireflies floating above). Connective pieces (fences, walls, paths, water, tiles,
+ * bridges) are drawn from their ground neighbourhood, so placing or removing one also
+ * redraws its neighbours.
  */
 export class PieceLayer {
   private readonly placed = new Map<number, Placed>();
@@ -43,7 +59,8 @@ export class PieceLayer {
 
   upsert(row: Piece): void {
     if (!isPieceKind(row.kind)) return;
-    const existing = this.placed.get(row.tileKey);
+    const key = slot(row.layer, row.tileKey);
+    const existing = this.placed.get(key);
     if (existing && existing.kind === row.kind) {
       existing.id = row.id;
       existing.rotation = row.rotation;
@@ -55,14 +72,15 @@ export class PieceLayer {
       id: row.id,
       object: new THREE.Group(),
       kind: row.kind,
+      layer: row.layer,
       rotation: row.rotation,
       tileX: row.tileX,
       tileZ: row.tileZ,
       age: 0,
     };
-    this.placed.set(row.tileKey, entry);
+    this.placed.set(key, entry);
     this.draw(entry);
-    this.redrawNeighbours(row.tileX, row.tileZ);
+    this.afterChange(row);
   }
 
   /**
@@ -71,11 +89,12 @@ export class PieceLayer {
    * row actually drawn on the tile is removed.
    */
   remove(row: Piece): void {
-    const entry = this.placed.get(row.tileKey);
+    const key = slot(row.layer, row.tileKey);
+    const entry = this.placed.get(key);
     if (!entry || entry.id !== row.id) return;
     entry.object.removeFromParent();
-    this.placed.delete(row.tileKey);
-    this.redrawNeighbours(row.tileX, row.tileZ);
+    this.placed.delete(key);
+    this.afterChange(row);
   }
 
   /** Removes every piece, when switching islands. */
@@ -96,8 +115,11 @@ export class PieceLayer {
     }
   }
 
+  /** The ground piece on a tile; connections only ever look at the ground. */
   private at(x: number, z: number): Placed | undefined {
-    return inBounds(x, z) ? this.placed.get(tileKey(x, z)) : undefined;
+    return inBounds(x, z)
+      ? this.placed.get(slot(GROUND, tileKey(x, z)))
+      : undefined;
   }
 
   /** (Re)builds an entry's model in place, keeping its pop-in progress. */
@@ -112,7 +134,13 @@ export class PieceLayer {
         )
       : createPieceModel(kind);
     if (!isConnective(kind)) object.rotation.y = (entry.rotation * Math.PI) / 2;
-    object.position.set(tileToWorld(entry.tileX), 0, tileToWorld(entry.tileZ));
+    const below =
+      entry.layer === OVERLAY ? this.at(entry.tileX, entry.tileZ) : undefined;
+    object.position.set(
+      tileToWorld(entry.tileX),
+      below ? (OVERLAY_LIFT[below.kind] ?? 0) : 0,
+      tileToWorld(entry.tileZ),
+    );
     if (entry.age === 0) object.scale.setScalar(0.001);
     else object.scale.copy(entry.object.scale);
     entry.object.removeFromParent();
@@ -120,13 +148,20 @@ export class PieceLayer {
     this.scene.add(object);
   }
 
-  /** All eight surrounding tiles: water and paths also fill corners from diagonals. */
-  private redrawNeighbours(x: number, z: number): void {
+  /**
+   * A ground change redraws connected neighbours on all eight sides (water and paths
+   * fill corners from diagonals) and the fireflies above it, which follow its height.
+   */
+  private afterChange(row: Piece): void {
+    if (row.layer !== GROUND) return;
+    const { tileX: x, tileZ: z } = row;
     for (let dx = -1; dx <= 1; dx++) {
       for (let dz = -1; dz <= 1; dz++) {
         const neighbour = dx || dz ? this.at(x + dx, z + dz) : undefined;
         if (neighbour && isConnective(neighbour.kind)) this.draw(neighbour);
       }
     }
+    const above = this.placed.get(slot(OVERLAY, row.tileKey));
+    if (above) this.draw(above);
   }
 }

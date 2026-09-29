@@ -12,16 +12,21 @@ import {
 import { MAX_PLOTS } from '../../spacetimedb/src/logic/plots';
 
 describe('island keys', () => {
-  it('gives every (island, tile) pair its own cell key', () => {
+  it('gives every (island, board, layer, tile) its own cell key', () => {
     const seen = new Set<bigint>();
-    for (const island of [1n, 2n, 3n, 999n]) {
-      for (let x = 0; x < GRID_SIZE; x++) {
-        for (let z = 0; z < GRID_SIZE; z++) {
-          seen.add(cellKey(island, tileKey(x, z)));
+    const boards = MAX_PLOTS + 1;
+    for (const island of [1n, 2n, 999n]) {
+      for (let board = 0; board < boards; board++) {
+        for (const layer of [0, 1]) {
+          for (let x = 0; x < GRID_SIZE; x++) {
+            for (let z = 0; z < GRID_SIZE; z++) {
+              seen.add(cellKey(island, tileKey(x, z), layer, board));
+            }
+          }
         }
       }
     }
-    expect(seen.size).toBe(4 * GRID_SIZE * GRID_SIZE);
+    expect(seen.size).toBe(3 * boards * 2 * GRID_SIZE * GRID_SIZE);
   });
 
   it('gives every (island, plot) pair its own plot key', () => {

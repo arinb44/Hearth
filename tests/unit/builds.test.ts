@@ -37,7 +37,18 @@ describe('placeable pieces', () => {
     ).toEqual([tree]);
   });
 
-  it('keeps only the first piece on a tile', () => {
+  it('keeps only the first piece on each layer of a tile', () => {
     expect(placeablePieces([tree, { ...tree, kind: 'rock' }])).toEqual([tree]);
+    const fireflies = { ...tree, kind: 'fireflies', rotation: 0 };
+    expect(placeablePieces([fireflies, tree, fireflies])).toEqual([
+      fireflies,
+      tree,
+    ]);
+  });
+
+  it('drops fireflies saved over a building', () => {
+    const house = { ...tree, kind: 'house' };
+    const fireflies = { ...tree, kind: 'fireflies' };
+    expect(placeablePieces([fireflies, house])).toEqual([house]);
   });
 });

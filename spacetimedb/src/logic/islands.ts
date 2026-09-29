@@ -32,12 +32,23 @@ export function defaultIslandName(username: string): string {
     : (username + "'s Isle").slice(0, ISLAND_NAME_MAX);
 }
 
+/** `piece.board` of an island's shared board; battle builders get boards 1–MAX_PLOTS. */
+export const SHARED_BOARD = 0;
+const BOARDS_PER_ISLAND = 10n;
+const LAYERS = 2n;
+
 /**
- * One number per (island, tile). The module marks it unique, so the database itself
- * still guarantees one piece per tile on every island.
+ * One number per (island, board, layer, tile). The module marks it unique, so the
+ * database itself guarantees one piece per tile on each layer of every board.
  */
-export function cellKey(islandId: bigint, tileKey: number): bigint {
-  return islandId * 1000n + BigInt(tileKey);
+export function cellKey(
+  islandId: bigint,
+  tileKey: number,
+  layer: number,
+  board: number = SHARED_BOARD,
+): bigint {
+  const slot = (islandId * BOARDS_PER_ISLAND + BigInt(board)) * LAYERS;
+  return (slot + BigInt(layer)) * 1000n + BigInt(tileKey);
 }
 
 /** One number per (island, plot); unique, so each plot has one builder per island. */
@@ -57,7 +68,7 @@ export function parseIslandName(raw: string): string | null {
 }
 
 // The key packing above relies on these bounds.
-if (GRID_SIZE * GRID_SIZE > 1000 || MAX_PLOTS > 10) {
+if (GRID_SIZE * GRID_SIZE > 1000 || MAX_PLOTS + 1 > Number(BOARDS_PER_ISLAND)) {
   throw new Error(
     'cellKey/plotKey packing no longer fits the grid or plot count',
   );

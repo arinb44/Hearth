@@ -3,6 +3,7 @@ import { tileKey } from './logic/grid';
 import {
   cellKey,
   defaultIslandName,
+  SHARED_BOARD,
   MAIN_ISLAND_NAME,
   MAX_ISLAND_PLAYERS,
   MAX_ISLANDS_PER_ACCOUNT,
@@ -17,8 +18,13 @@ import {
   BUILD_ERROR_MESSAGES,
   checkModify,
   checkPlacement,
+  GROUND,
+  layerOf,
+  modifyTarget,
+  OVERLAY,
   SERVER_REACH_SLACK,
   type BuildError,
+  type TileContents,
 } from './logic/pieces';
 import { PLAYER_COLORS, pickColorIndex, sanitizeName } from './logic/players';
 import {
@@ -90,6 +96,18 @@ function logActivity(
     tileX,
     tileZ,
   });
+}
+
+/** The pieces on a tile of an island's shared board, by layer. */
+function tileRows(ctx: Ctx, islandId: bigint, key: number) {
+  return {
+    ground: ctx.db.piece.cellKey.find(cellKey(islandId, key, GROUND)),
+    overlay: ctx.db.piece.cellKey.find(cellKey(islandId, key, OVERLAY)),
+  };
+}
+
+function contentsOf(rows: ReturnType<typeof tileRows>): TileContents {
+  return { ground: rows.ground?.kind, overlay: rows.overlay?.kind };
 }
 
 function requireName(raw: string): string {
@@ -280,14 +298,14 @@ export const placePiece = spacetimedb.reducer(
     const me = requirePlayer(ctx);
     const state = requireGameState(ctx, me.islandId);
     const key = tileKey(tileX, tileZ);
-    const cell = cellKey(me.islandId, key);
+    const layer = layerOf(kind);
     failIf(
       checkPlacement({
         kind,
         rotation,
         tile: { x: tileX, z: tileZ },
         phase: state.phase.tag,
-        occupied: ctx.db.piece.cellKey.find(cell) !== null,
+        contents: contentsOf(tileRows(ctx, me.islandId, key)),
         playerPos: me,
         reachSlack: SERVER_REACH_SLACK,
         plot: buildRestriction(ctx, me.islandId, ctx.sender),
@@ -296,7 +314,9 @@ export const placePiece = spacetimedb.reducer(
     ctx.db.piece.insert({
       id: 0n,
       islandId: me.islandId,
-      cellKey: cell,
+      board: SHARED_BOARD,
+      layer,
+      cellKey: cellKey(me.islandId, key, layer),
       tileKey: key,
       tileX,
       tileZ,
@@ -312,28 +332,35 @@ export const placePiece = spacetimedb.reducer(
   },
 );
 
-function requireModifiable(ctx: Ctx, tileX: number, tileZ: number) {
+/** The piece a rotate or remove acts on, after checking the caller may change it. */
+function requireModifiable(
+  ctx: Ctx,
+  tileX: number,
+  tileZ: number,
+  action: 'rotate' | 'remove',
+) {
   const me = requirePlayer(ctx);
-  const existing = ctx.db.piece.cellKey.find(
-    cellKey(me.islandId, tileKey(tileX, tileZ)),
-  );
+  const rows = tileRows(ctx, me.islandId, tileKey(tileX, tileZ));
+  const contents = contentsOf(rows);
   failIf(
     checkModify({
       tile: { x: tileX, z: tileZ },
       phase: requireGameState(ctx, me.islandId).phase.tag,
-      occupied: existing !== null,
+      contents,
       playerPos: me,
       reachSlack: SERVER_REACH_SLACK,
       plot: buildRestriction(ctx, me.islandId, ctx.sender),
     }),
   );
+  const existing =
+    modifyTarget(contents, action) === GROUND ? rows.ground : rows.overlay;
   return { me, existing: existing! };
 }
 
 export const rotatePiece = spacetimedb.reducer(
   { tileX: t.u8(), tileZ: t.u8() },
   (ctx, { tileX, tileZ }) => {
-    const { existing } = requireModifiable(ctx, tileX, tileZ);
+    const { existing } = requireModifiable(ctx, tileX, tileZ, 'rotate');
     ctx.db.piece.id.update({
       ...existing,
       rotation: (existing.rotation + 1) % 4,
@@ -344,7 +371,7 @@ export const rotatePiece = spacetimedb.reducer(
 export const removePiece = spacetimedb.reducer(
   { tileX: t.u8(), tileZ: t.u8() },
   (ctx, { tileX, tileZ }) => {
-    const { me, existing } = requireModifiable(ctx, tileX, tileZ);
+    const { me, existing } = requireModifiable(ctx, tileX, tileZ, 'remove');
     ctx.db.piece.id.delete(existing.id);
     logActivity(ctx, me, 'removed', existing.kind, tileX, tileZ);
     checkEarlyCompletion(ctx, me.islandId);

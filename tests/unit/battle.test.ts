@@ -151,7 +151,7 @@ describe('battle build rules', () => {
     rotation: 0,
     tile,
     phase: 'Building',
-    occupied: false,
+    contents: {},
     playerPos: standing,
   };
 
@@ -161,9 +161,9 @@ describe('battle build rules', () => {
 
   it('rejects building in someone else’s plot', () => {
     expect(checkPlacement({ ...base, plot: 0 })).toBe('outside_plot');
-    expect(checkModify({ ...base, occupied: true, plot: 0 })).toBe(
-      'outside_plot',
-    );
+    expect(
+      checkModify({ ...base, contents: { ground: 'tree' }, plot: 0 }),
+    ).toBe('outside_plot');
   });
 
   it('rejects hosts and spectators, who have no plot', () => {

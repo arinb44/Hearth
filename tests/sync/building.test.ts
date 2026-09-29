@@ -6,7 +6,11 @@ import {
   worldToTile,
   type Tile,
 } from '../../spacetimedb/src/logic/grid';
-import { PIECE_KINDS } from '../../spacetimedb/src/logic/pieces';
+import {
+  GROUND,
+  OVERLAY,
+  PIECE_KINDS,
+} from '../../spacetimedb/src/logic/pieces';
 import {
   connectClients,
   disconnectAll,
@@ -94,6 +98,68 @@ describe('building sync', () => {
       );
       expect(onTile).toHaveLength(1);
     }
+  });
+
+  it('stacks one swarm of fireflies over a piece, and removes the top piece first', async () => {
+    clients.push(...(await connectClients(6)));
+    await joinAll(clients, 'Stacker');
+    const center = { x: 12, z: 12 };
+    await clients[0].conn.reducers.placePiece({
+      kind: 'tree',
+      tileX: center.x,
+      tileZ: center.z,
+      rotation: 0,
+    });
+
+    // Six players release fireflies over the same tree at once; the overlay layer's
+    // cell is unique too, so exactly one swarm lands.
+    const results = await Promise.allSettled(
+      clients.map((c) =>
+        c.conn.reducers.placePiece({
+          kind: 'fireflies',
+          tileX: center.x,
+          tileZ: center.z,
+          rotation: 0,
+        }),
+      ),
+    );
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    for (const viewer of clients) {
+      await waitFor(
+        () => pieceAt(viewer.conn, island, center, OVERLAY) !== undefined,
+        'fireflies visible',
+      );
+      expect(pieceAt(viewer.conn, island, center, GROUND)?.kind).toBe('tree');
+    }
+
+    const [builder, watcher] = clients;
+    await builder.conn.reducers.rotatePiece({ tileX: 12, tileZ: 12 });
+    await waitFor(
+      () => pieceAt(watcher.conn, island, center, GROUND)?.rotation === 1,
+      'the tree turned, not the fireflies',
+    );
+    await builder.conn.reducers.removePiece({ tileX: 12, tileZ: 12 });
+    await waitFor(
+      () => pieceAt(watcher.conn, island, center, OVERLAY) === undefined,
+      'fireflies removed first',
+    );
+    expect(pieceAt(watcher.conn, island, center, GROUND)?.kind).toBe('tree');
+
+    // No fireflies on buildings.
+    await builder.conn.reducers.placePiece({
+      kind: 'house',
+      tileX: 13,
+      tileZ: 12,
+      rotation: 0,
+    });
+    await expect(
+      builder.conn.reducers.placePiece({
+        kind: 'fireflies',
+        tileX: 13,
+        tileZ: 12,
+        rotation: 0,
+      }),
+    ).rejects.toThrow(/building/);
   });
 
   it('keeps every concurrent placement on distinct tiles, identically on all clients', async () => {
