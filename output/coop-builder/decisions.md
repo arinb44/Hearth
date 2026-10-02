@@ -67,3 +67,4 @@
 | 2026-10-04 | — | Commit M9c | Commit and continue / commit and stop / not yet | Commit locally and continue with M9d |
 | 2026-10-04 | — | Commit M9d and the ship docs | Commit / not yet | Commit both |
 | 2026-10-04 | — | Ship Revision 6 | Publish and push / push nothing yet | Maincloud republished with `--delete-data=always` (approved; live data wiped), then push `main` |
+| 2026-10-04 | — | Refreshed handoff after Revision 6 | Commit and push / keep local | Commit and push |
