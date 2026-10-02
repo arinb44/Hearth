@@ -65,3 +65,5 @@
 | 2026-10-04 | — | Local databases during Revision 6 | Wipe and republish as needed / ask each time | Wipe and republish local preview and dev DBs (`coop-builder-r6`, `coop-builder-m8c`, `coop-builder-preview`, `coop-builder`) as needed; Maincloud still needs its own approval |
 | 2026-10-04 | — | Commit M9b | Commit and continue / commit and stop / not yet | Commit locally and continue with M9c |
 | 2026-10-04 | — | Commit M9c | Commit and continue / commit and stop / not yet | Commit locally and continue with M9d |
+| 2026-10-04 | — | Commit M9d and the ship docs | Commit / not yet | Commit both |
+| 2026-10-04 | — | Ship Revision 6 | Publish and push / push nothing yet | Maincloud republished with `--delete-data=always` (approved; live data wiped), then push `main` |

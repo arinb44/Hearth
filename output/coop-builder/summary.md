@@ -2,21 +2,27 @@
 
 **Prepared by:** Coop Builder Agent
 **Date:** 2026-10-04
-**Status:** Partially complete. All planned features are built, tested and deployed. Two checks still need real hardware: phones, and 10 human players on separate devices at once.
+**Status:** Partially complete. Every planned feature (plan revisions 1–6) is built and tested. Two checks still need real hardware: a real phone, and about 10 human players on separate devices at once.
 
 ## 1. Overview
-Coop Builder is a low-poly 3D multiplayer building game for up to 10 players, built for the MHacks "Best use of Spacetime" track. SpacetimeDB is the entire backend:
-- **Tables** hold every player, piece, round, vote and result.
+Coop Builder is a low-poly 3D multiplayer building game for the MHacks "Best use of Spacetime" track. SpacetimeDB is the entire backend:
+- **Tables** hold every account, island, player, piece, round, vote, result, friendship and saved build (19 tables).
 - **Reducers** make every change, inside server-validated transactions.
-- **Scheduled reducers** drive the round clock.
+- **Scheduled reducers** drive each island's round clock and the battle showcase.
+- **Unique columns** settle races (one piece per tile and layer).
 - **An event table** feeds the activity stream.
-- **Clients render only from live subscriptions.**
+- **A per-user view** delivers each player's recovery code only to them.
+- **Client visibility filters** keep friend requests, friendships and saved builds private to their owners.
+- **Filtered subscriptions** give each client only its island, and during a battle only its own board.
 
-Each round is picked by a live lobby vote:
-- **Co-op Challenge:** four preset target lists, scored by the server, with an early-finish time bonus.
-- **Build Battle:** a popular theme or a player-submitted idea. Each builder gets a personal plot, then everyone votes for the best build.
+Players make an account (username plus recovery code), add friends, and play on the shared Main Island or on islands of their own, with up to 10 players per island. Each round is picked by a live lobby vote:
+- **Co-op round:** everyone builds together on a theme. There are no objectives: every piece scores 1 point, or 2 with its combo partner (bridge by water, lamp or bench by a path, well or flowers by a house, fence by greenery, wall by a tower, fireflies over greenery). Stars come at 25, 50 and 100 points.
+- **Build Battle:** each builder works on a private, island-sized board. Then every screen tours the builds in sync, and everyone votes for the best one.
 
-The web client (TypeScript, Three.js, Kenney CC0 models) runs on laptops and on phones held sideways. It has 16 piece kinds in four palette sections (Buildings, Greenery, Furniture, Environment). Fences, paths, water and bridges link up with their neighbours. Each player picks their own time of day and fog, and clouds cast moving shadows. The module is on Maincloud's free tier, and the client is on GitHub Pages.
+The client (TypeScript, Three.js, Kenney CC0 models) runs on laptops and on phones held sideways:
+- 17 piece kinds. Fences, walls, paths, water and bridges join their neighbours, and fireflies can float over other pieces.
+- A personal time of day and fog.
+- An Esc menu with tabs for islands, friends, builds and profile.
 
 - **Play:** https://arinb44.github.io/SpacetimeDemoMHacks/
 - **Database dashboard:** https://spacetimedb.com/coop-builder-mhacks
@@ -24,45 +30,62 @@ The web client (TypeScript, Three.js, Kenney CC0 models) runs on laptops and on 
 ## 2. Requirements Checklist
 | # | Requirement | Status | Note |
 |---|---|---|---|
-| 1 | All shared state in SpacetimeDB; changes only through reducers | Done | 13 tables; the client never mutates state locally |
-| 2 | Join with a nickname and color; identity survives reload | Done | Token per server and database; `?slot=N` for several players in one browser |
+| 1 | All shared state in SpacetimeDB; changes only through reducers | Done | 19 tables; the client never mutates state locally |
+| 2 | Join with a name and color; identity survives reload | Done | Accounts (req. 18) replaced the nickname prompt; `?slot=N` for several players in one browser |
 | 3 | Live movement, interpolated, validated by the server | Done | Token-bucket speed limit plus island bounds; prediction with snap-back |
 | 4 | Place, rotate and remove with server rules and feedback | Done | Shared rules in `logic/pieces.ts`; toasts on rejection |
-| 5 | Same-tile race produces exactly one winner | Done | Unique `tile_key`; sync test with 8 clients |
-| 6 | Rounds driven by scheduled reducers; clients agree on the countdown | Done | One-shot `phase_timer`; stale timers ignored; server-clock offset on clients |
-| 7 | Co-op challenges, live progress, server score, results | Done | 4 challenges; early completion and time bonus; contributions |
-| 8 | Feed and effects from an event table | Done | `activity` event table drives the feed and placement puffs |
-| 9 | 10 concurrent players without visible lag | Partial | 10 bots on Maincloud for 60 s: 0 errors, round trip p50 29 ms / p95 32 ms. Not yet tried with 10 real devices |
-| 10 | Laptops and phones (landscape) | Partial | Laptops verified. Phones verified in emulation only (joystick, tap to build, Turn/Remove, rotate card, collapsible palette); not yet on a real phone |
-| 11 | Reconnect keeps identity and current state | Done | Sync test; automatic reload with backoff verified by restarting the server |
+| 5 | Same-tile race produces exactly one winner | Done | Unique `cell_key` (island, board, layer, tile); sync tests with 8 and 6 clients |
+| 6 | Rounds driven by scheduled reducers; clients agree on the countdown | Done | One-shot `phase_timer` per island; stale timers ignored; server-clock offset |
+| 7 | Co-op rounds, live progress, server score, results | Done | Revision 6: themes and combo scoring replace the challenge checklists (req. 26–27) |
+| 8 | Feed and effects from an event table | Done | `activity`, with a board column so private battle builds stay private |
+| 9 | 10 concurrent players without visible lag | Partial | 10 bots on Maincloud: 0 errors, round trip p50 29 ms; not yet tried with 10 real devices |
+| 10 | Laptops and phones (landscape) | Partial | Phones checked in emulation only (including the new menu at 740×360) |
+| 11 | Reconnect keeps identity and current state | Done | Sync test; automatic reload with backoff; you return to your island |
 | 12 | Maincloud free tier plus a public URL; no paid services | Done | `coop-builder-mhacks` and GitHub Pages |
-| 13 | Consistent low-poly look | Done | Kenney models, sky, clouds with shadows, waves, decorated beach, confetti; connected fences, paths, water and bridges; personal day/dusk/night with stars and glowing lamps and fireflies; fog |
-| 14 | Unit and sync tests pass | Done | 75 passing (59 unit, 16 sync) |
+| 13 | Consistent low-poly look | Done | Kenney models, sky, clouds with shadows, waves, connected pieces, day/dusk/night, glow |
+| 14 | Unit and sync tests pass | Done | 134 passing (101 unit, 33 sync) |
 | 15 | README: setup, run, deploy, join, credits | Done | Also covers architecture, admin controls and the demo script |
 | 16 | Lobby theme vote and player ideas | Done | Live tally, one idea per player, random tie-break |
-| 17 | Build Battle with plots and voting | Done | 3×3 plots of 8×8; the idea's author hosts; no self-votes |
+| 17 | Build Battle with voting | Done | Revision 6: private boards plus a showcase tour (req. 28) |
+| 18 | Accounts with recovery codes | Done | Case-insensitive unique usernames; a code moves the account to a new device and is replaced |
+| 19 | Profile and stats | Done | Rounds, wins, pieces placed |
+| 20 | Islands | Done | Main Island plus up to 3 per account; 10 players each; per-island rounds; filtered subscriptions |
+| 21 | Friends with presence and Join | Done | Visibility filters; online status and island; ask-back accepts |
+| 22 | Saved builds | Done | Up to 10 per account, owner-only; load on your own island in the lobby; player islands don't auto-start |
+| 23 | Navigation between main screen and island | Done | Menu button and Esc (req. 29) |
+| 24 | Fireflies stack on non-buildings | Done | Overlay layer; buildings refuse them with a message |
+| 25 | Stone Wall joins towers | Done | Connected model drawn in code |
+| 26 | Co-op without objectives; nothing stops building until time is up | Done | No checklist, no early finish; reach and the post-time pause stay (user's choice) |
+| 27 | Combo scoring | Done | Approved table; live score card; combos on the results |
+| 28 | Private battle boards and a synced tour | Done | Your own board only while building; Showcase phase steps every client through each build |
+| 29 | Escape menu | Done | Back to game, Exit to main menu; tabs Islands (live status), Friends, Builds, Profile |
 
 ## 3. Changes Made
-New project in `spacetime-market\`, built on the repo's existing README and LICENSE.
+All in `spacetime-market\`, built on the repo's existing README and LICENSE.
 - **Server module (`spacetimedb/src/`):**
   - `schema.ts`: tables.
-  - `rounds.ts`: the phase machine, round choice, plots, scoring and tally.
-  - `index.ts`: reducers, lifecycle hooks, admin controls.
-  - `logic/`: pure shared rules (`grid`, `movement`, `players`, `pieces`, `challenges`, `scoring`, `phases`, `themes`, `plots`).
+  - `index.ts`: reducers, lifecycle hooks, admin controls, the recovery-code view.
+  - `rounds.ts`: per-island phase machine, round choice, scoring, the battle showcase and tally.
+  - `islands.ts`, `accounts.ts`: helpers, including presence.
+  - `friends.ts`, `builds.ts`: reducers and visibility filters.
+  - `logic/`: pure shared rules: `grid`, `movement`, `players`, `pieces`, `challenges` (themes), `scoring` (combos), `phases`, `themes`, `plots` (battle boards), `islands`, `accounts`, `friends`, `builds`.
 - **Client (`src/`):**
-  - `game/`: game wiring, local player prediction, builder.
-  - `scene/`: world with environment presets, avatars, pieces, model library, connected models (fences, paths, water, tiles, bridges), glow (lamps, fireflies), plots, effects.
-  - `input/`: keyboard, pointer, touch joystick.
-  - `net/`: connection, server clock, queries, reconnect.
-  - `ui/`: HUD, lobby ballot, battle voting, results, sectioned palette, environment settings, feed, toast, join screen, orientation, layout.
-  - `module_bindings/`: generated by `spacetime generate`.
-- **Assets:** `public/assets/models/`: 23 Kenney CC0 GLB models, a colormap texture and the license files (430 KB).
-- **Tests:** `tests/unit/` (6 files) and `tests/sync/` (5 files plus setup and helpers).
-- **Tooling:** `scripts/spacetime.mjs` (CLI wrapper), `scripts/bots.ts` (load testing), `.github/workflows/pages.yml`, `.env.development` / `.env.production`, Vite, Vitest and Prettier config.
-- **Docs:** `README.md`, plus `output/coop-builder/` (agent definition, plan revisions 1–3, decisions, progress, this summary).
+  - `game/`: game wiring (board on show, private building), local player, builder.
+  - `scene/`: world, avatars, pieces (layers), model library, connected models (fences, walls, paths, water, tiles, bridges), glow, effects.
+  - `net/`: connection, island subscription (board-filtered pieces), queries, clock, reconnect.
+  - `ui/`: main screen and menu with tabs, friends, builds, HUD with live score, lobby, battle vote with preview, results, palette, settings, feed, toast.
+  - `module_bindings/`: generated.
+  - Removed in Revision 6: the 8×8 battle plots (`scene/plots.ts`).
+- **Assets:** 22 Kenney CC0 GLB models, a colormap and the license files in `public/assets/models/`.
+- **Tests:** 12 unit files and 9 sync files in `tests/`.
+- **Tooling:** `scripts/spacetime.mjs`, `scripts/bots.ts`, the Pages workflow, env files, and Vite, Vitest and Prettier config.
+- **Docs:** `README.md`, plus `output/coop-builder/` (agent definition, plan revisions 1–6, decisions, progress, this summary).
 
 ## 4. How to Use / Run
-- **Play:** open the Pages URL, enter a name, and walk with WASD or the joystick. Place pieces with the palette (1–0) and click or tap a tile; right-click or Remove deletes. Vote in the lobby and press Start.
+- **Play:** open the Pages URL and create an account. Then:
+  - Press Play on the Main Island, or make your own island.
+  - Walk with WASD or the joystick. Pick pieces from the palette and click a tile; right-click removes.
+  - Esc opens the menu.
 - **Local development:**
   ```bash
   npm install
@@ -71,19 +94,23 @@ New project in `spacetime-market\`, built on the repo's existing README and LICE
   npm run stdb:publish:local
   npm run dev                   # http://localhost:5173
   ```
-- **Deploy:** `spacetime login`, then `npm run stdb:publish` (Maincloud). Every push to `main` redeploys Pages.
-- **Admin (publisher identity):** `spacetime call coop-builder-mhacks skip_phase | reset_game | configure_timing <lobby> <build> <scoring> <voting> <results>`.
-- **Load test:** `npm run bots -- --count 10 --target maincloud --seconds 60`.
+- **Deploy:** `spacetime login`, then `npm run stdb:publish` (a breaking schema change needs `-- --delete-data=always`). Every push to `main` redeploys Pages.
+- **Admin (publisher identity):** `spacetime call coop-builder-mhacks skip_phase <island> | reset_game <island> | configure_timing <lobby> <build> <scoring> <voting> <results> <showcase>`.
+- **Load test:** `npm run bots -- --count 9 --target maincloud --seconds 60`.
 - **Demo script:** see the README.
 
 ## 5. Testing
-- **Command:** `npm test` (unit plus sync; the sync tests need `npm run stdb:start`).
-- **Final results:** 75 passed, 0 failed (59 unit, 16 sync).
+- **Command:** `npm test` (unit, then sync; the sync tests need a local server).
+- **Final results:** 134 passed, 0 failed (101 unit, 33 sync).
 - **Covered:**
-  - Every pure rule: grid, movement and speed limit, naming and colors, placement and battle rules, challenges and scoring, timing, theme tally, plots.
-  - Multi-client sync on real SDK clients: join and move convergence, teleport clamping, two tabs on one identity, reconnect, the same-tile race, simultaneous placements, rotate and remove, event delivery, rejected actions, timed rounds, early completion, admin permissions, theme vote, a full battle round.
-- **Not covered by automated tests:** rendering and HUD behavior, and touch input. These were checked manually in the browser (desktop and emulated phone), not on real devices.
-- **Load:** 10 bots against Maincloud with clean logs.
+  - Every pure rule: grid, movement, names, placement and stacking, wall joins, battle boards and showcase order, every combo, stars, timing, theme tally, islands, accounts, friends, builds.
+  - Multi-client sync on real SDK clients:
+    - movement, the same-tile race on each layer, rounds and combo scoring
+    - accounts and recovery, island isolation
+    - friends: visibility to a third account and to a late subscriber, presence and Join
+    - saved builds: owner-only, load restoring every client's board
+    - a full private battle: one board per subscription while building, the synced showcase, votes, the winner
+- **Not covered by automated tests:** rendering and touch input. These were checked by hand in the browser with two tabs, plus an emulated phone layout.
 
 ## 6. Commits
 | Hash | Message |
@@ -97,44 +124,45 @@ New project in `spacetime-market\`, built on the repo's existing README and LICE
 | `bebfd79` | feat: polish visuals with Kenney low-poly models and scene effects |
 | `d452336` | feat: add landscape phone support with touch controls |
 | `aa1f820` | feat: join fences and paths with neighbours; auto-reconnect |
-| *(pending)* | feat: add environment effects, new pieces, and sectioned palette |
+| `7a2e862` | feat: add environment effects, new pieces, and sectioned palette |
+| `e70df6f` | feat: add accounts with recovery codes and a main screen |
+| `b286649` | feat: add islands with separate boards, rounds, and subscriptions |
+| `ce66b91` | feat: add friends, presence, and saved builds |
+| `07c03f9` | docs: describe friends and saved builds; plan revision 6 |
+| `917bf28` | feat: stack fireflies over pieces and add connecting stone walls |
+| `d4cc0a3` | feat: score co-op rounds by pieces with combo multipliers |
+| `8f1f9b9` | feat: private battle boards with a synced showcase tour |
 
-All are on `main` at https://github.com/arinb44/SpacetimeDemoMHacks, authored as `arinb44`, with no AI markers. The commit for this last round (environment, new pieces, demo script, this summary) is pending approval.
+All are authored as `arinb44`, with no AI markers. The M9d commit (Escape menu) and the docs commit for this summary come next, each with approval.
 
 ## 7. Decision Log
 Full log: `decisions.md`.
 - **Game and stack:**
-  - A co-op builder in low-poly 3D, with timed challenges, prefab pieces and walking avatars.
-  - A TypeScript module (switched from C++ to cut toolchain risk), on Maincloud's free tier.
-  - Plain TypeScript + Three.js + Vite on the client.
-  - Client prediction with server validation for movement.
-  - Objective co-op scoring; the board clears each round.
-  - Kenney CC0 assets; GitHub Pages hosting; anyone can start a round, with a 30 s auto-start.
-- **Scope changes you requested:**
+  - A co-op builder in low-poly 3D, with walking avatars and prefab pieces.
+  - A TypeScript module on Maincloud's free tier.
+  - Plain TypeScript, Three.js and Vite on the client; Kenney CC0 assets; GitHub Pages.
+- **Rounds:**
   - Lobby theme vote with player ideas.
-  - Build Battle with plots and everyone voting.
-  - Phones dropped, then restored, then made landscape-only.
-  - Collapsible piece palette.
-  - Connected fences and paths.
-  - Environment: personal day/dusk/night and fog, cloud shadows, water, stone tiles, bridges, grass, fireflies, bench.
-  - Palette subheadings with sections that fold one at a time.
-  - Seamless water squares (corner filling).
+  - Co-op rounds now have no objectives and use combo scoring.
+  - Build Battles use private boards and a showcase tour.
+  - Only the Main Island auto-starts rounds.
+- **Social:**
+  - Username plus recovery code accounts.
+  - Multiple islands.
+  - Presence stored on the public account row (friends see online status and island).
+  - Saved builds that load on your own island in the lobby.
+- **Building:** fireflies stack on non-buildings; stone walls join towers; the reach limit stays.
 - **Operations:**
-  - Commits authored as the repo-local identity `arinb44`.
-  - Planning docs committed.
-  - Local databases wiped after the Maincloud login replaced the old local identity.
+  - Repo-local identity `arinb44`; planning docs committed.
+  - Maincloud republished with `--delete-data` when the schema changed (only test data was there).
+  - Pushes held back until the matching Maincloud publish.
 
 ## 8. Known Issues & Next Steps
-- **Real-device checks are still needed:**
-  - Phones: landscape, joystick, tap to build, and fullscreen/orientation lock on Android (iOS can't lock).
-  - A session with about 10 real players.
-- **Maincloud free tier:** databases pause when idle (open the site early), and energy use can only be seen on the dashboard (the CLI has no energy command).
-- **Generated typings:** they show unique indexes as range indexes. `src/net/queries.ts#pieceAt` works around this. Regenerating bindings after a SpacetimeDB upgrade may fix it.
-- **Moderation:** player ideas are cleaned up and length-limited, with no profanity filter. Use the admin `reset_game` if needed.
-- **Live database:** pieces from the bot load test are still on the board. Run `reset_game` before the demo, as in the README.
-- **Possible follow-ups:**
-  - A QR code on the lobby screen for joining.
-  - Spectator camera controls.
-  - Sound effects.
-  - A camera tour of each plot during battle voting.
-  - Code-splitting the 660 KB client bundle.
+- **Real-device checks are still needed:** a real phone in landscape, and a session with about 10 real players.
+- **Battle privacy is client-side.** The official client only subscribes to its own board while building, but a modified client could still request other boards. Enforcing it would need a phase-aware visibility filter.
+- **Presence is public.** Anyone can see whether a username is online and which island it's on (a choice made for simplicity and low cost).
+- **Breaking schema changes wipe the live database,** including any accounts players made.
+- **Maincloud free tier:** the database pauses when idle, so open the site about 2 minutes before a demo.
+- **Generated typings** call unique indexes range indexes; `src/net/queries.ts#pieceAt` works around this.
+- **Moderation:** ideas and names are cleaned and length-limited, but there is no profanity filter.
+- **Possible follow-ups:** a QR code to join, a spectator camera, sound effects, and code-splitting the ~810 KB bundle.

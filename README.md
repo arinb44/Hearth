@@ -8,29 +8,34 @@ From the main screen they can add friends by username, see which island each fri
 is on and join them, and save an island's board to load again later on their own
 island. Each round is chosen by a live lobby vote:
 
-- **Co-op Challenge**: everyone builds toward a target list ("4 Houses, every House
-  next to a Path…") before the clock runs out. The server scores the board, and
-  finishing early earns a time bonus.
+- **Co-op round**: everyone builds together on the island on a theme ("Cozy
+  Village", "Castle Lookout"…). There is no checklist: every piece scores a point,
+  and good pairings score double (a lamp by a path, a bridge by water, fireflies over
+  a tree…). The server scores the board when time is up; 25, 50, and 100 points earn
+  one to three stars.
 - **Build Battle**: a popular theme or a player-submitted idea. Every builder gets a
-  personal plot, then everyone votes for the best build (not their own).
+  private board the size of the island and works unseen. When time is up, every
+  screen tours the builds one at a time, then everyone votes for the best one (not
+  their own).
 
 ## How SpacetimeDB is used
 
 SpacetimeDB is the entire backend. There is no other server.
 
-| Concern                                                      | SpacetimeDB feature                                                                                       |
-| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| Players, positions, pieces, rounds, votes, results           | Public **tables** (`player`, `piece`, `game_state`, `theme_vote`, `plot`, `plot_vote`, `round_result`, …) |
-| Separate islands, each with its own board and rounds         | An `island_id` on every per-world row; clients **subscribe with a filter** to just their island           |
-| Every action (move, place, vote, start)                      | **Reducers**: server-validated transactions (bounds, reach, speed limit, plot rules)                      |
-| One piece per tile, even when 10 players click the same tile | A **unique column** (`piece.cell_key`, island + tile): exactly one transaction wins                       |
-| Round clock (Lobby → Building → Scoring/Voting → Results)    | **Scheduled reducers** on a `phase_timer` schedule table; clients never drive time                        |
-| Activity feed ("Ada placed a House")                         | An **event table** (`activity`)                                                                           |
-| Live UI on every client                                      | **Subscriptions**: the client renders only what the database sends                                        |
-| Multiple tabs, reconnects                                    | Identity tokens + a private `session` table                                                               |
-| Accounts and recovery codes                                  | A private `account_secret` table, readable only through a **per-user view** (`my_recovery_code`)          |
-| Friend requests, friendships, and saved builds               | **Client visibility filters** (row-level security): each row reaches only the accounts it belongs to      |
-| Friends' online status and island                            | Presence on the `account` row, written on connect, disconnect, and island moves (never on movement)       |
+| Concern                                                                 | SpacetimeDB feature                                                                                       |
+| ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Players, positions, pieces, rounds, votes, results                      | Public **tables** (`player`, `piece`, `game_state`, `theme_vote`, `plot`, `plot_vote`, `round_result`, …) |
+| Separate islands, each with its own board and rounds                    | An `island_id` on every per-world row; clients **subscribe with a filter** to just their island           |
+| Every action (move, place, vote, start)                                 | **Reducers**: server-validated transactions (bounds, reach, speed limit, stacking, boards)                |
+| One piece per tile and layer, even when 10 players click it             | A **unique column** (`piece.cell_key`: island, board, layer, tile): exactly one transaction wins          |
+| Round clock (Lobby → Building → Scoring or Showcase → Voting → Results) | **Scheduled reducers** on a `phase_timer` schedule table; clients never drive time                        |
+| Private battle builds, then a shared tour                               | Each client **subscribes to its own board** while building, then to every board for the showcase          |
+| Activity feed ("Ada placed a House")                                    | An **event table** (`activity`)                                                                           |
+| Live UI on every client                                                 | **Subscriptions**: the client renders only what the database sends                                        |
+| Multiple tabs, reconnects                                               | Identity tokens + a private `session` table                                                               |
+| Accounts and recovery codes                                             | A private `account_secret` table, readable only through a **per-user view** (`my_recovery_code`)          |
+| Friend requests, friendships, and saved builds                          | **Client visibility filters** (row-level security): each row reaches only the accounts it belongs to      |
+| Friends' online status and island                                       | Presence on the `account` row, written on connect, disconnect, and island moves (never on movement)       |
 
 The game rules (placement, movement limits, scoring, vote tally) live in
 `spacetimedb/src/logic/`. The module enforces them and the client uses the same code
@@ -81,9 +86,12 @@ bindings, then republish.
 - **☀️ / 🌫️ (top right)**: your own time of day (Day, Dusk, Night) and fog; saved on
   your device, not shared
 - **Click**: place (or rotate an existing piece) · **Right-click**: remove
+- **Fireflies** float over any piece but a building; **Stone Walls** join up with
+  towers and each other.
 - You can build within the white ring around your avatar.
-- **☰ Menu**: back to the main screen (your islands, friends, and saved builds)
-  without leaving your island.
+- **Esc** or **☰ Menu**: the menu over the game: back to the game, exit to the main
+  screen, and tabs for islands (with who is on them and what they are doing),
+  friends, saved builds, and your profile.
 
 ## Tests
 
@@ -120,8 +128,8 @@ id; the Main Island is `1` (list them with
 ```bash
 spacetime call coop-builder-mhacks skip_phase 1     # end the island's current phase now
 spacetime call coop-builder-mhacks reset_game 1     # clear the island's board, back to lobby
-spacetime call coop-builder-mhacks configure_timing 30 120 4 25 12
-#                        lobby build scoring voting results (seconds, all islands; lobby 0 = no auto-start)
+spacetime call coop-builder-mhacks configure_timing 30 120 4 25 12 8
+#            lobby build scoring voting results showcase (seconds per build), all islands; lobby 0 = no auto-start
 ```
 
 ## Demo script (judging)
@@ -132,7 +140,7 @@ spacetime call coop-builder-mhacks configure_timing 30 120 4 25 12
    free-tier database pauses when idle, and the first connection wakes it.
 2. Optional clean slate: `spacetime call coop-builder-mhacks reset_game 1`.
 3. Optional shorter rounds for a tight slot:
-   `spacetime call coop-builder-mhacks configure_timing 20 60 3 20 8`.
+   `spacetime call coop-builder-mhacks configure_timing 20 60 3 20 8 6`.
 4. Put the game on the projector from a laptop. Judges join on their own phones
    (held sideways) or laptops with the same URL: pick a username, then **Play** on
    the Main Island (or on your island, which shows up in their list once you're on it).
@@ -142,15 +150,16 @@ spacetime call coop-builder-mhacks configure_timing 30 120 4 25 12
 1. **Live lobby**: everyone joins; names, colors, and the online list update for
    all players instantly (subscriptions). A judge types an idea ("Pirate Cove"),
    and it appears on every ballot; votes and voter dots update live.
-2. **Co-op round**: start a challenge such as Cozy Village. Everyone builds; the
-   checklist ticks up live from the shared board. Finish early to show the time
-   bonus. The countdown comes from a **scheduled reducer**, not from any client.
+2. **Co-op round**: start a theme such as Cozy Village. Everyone builds together;
+   the score and the combos found tick up live from the shared board (try a lamp by
+   a path). The countdown comes from a **scheduled reducer**, not from any client.
 3. **Server-side rules**: two people click the same tile at the same moment, and
    exactly one piece appears (a unique column, enforced in one transaction).
    Building out of reach or after time is up is rejected by the server.
-4. **Build Battle**: vote for the judge's idea. Each builder gets a plot, the judge
-   hosts, everyone votes (not for themselves), and the winner is tallied
-   server-side.
+4. **Build Battle**: vote for the judge's idea. Each builder works on a private
+   board that nobody else receives; when time is up, every screen shows the same
+   build at the same moment, one after another. Everyone votes (not for themselves),
+   and the winner is tallied server-side.
 5. **Friends and saved builds**: a judge adds you by username and you accept; your
    friends list shows their island live, and **Join** takes you there. On your own
    island, save the board from ☰ Menu, change it, then **Load** the build in the
