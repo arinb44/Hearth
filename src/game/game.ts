@@ -69,6 +69,13 @@ export class Game {
       this.showHome(false),
     );
     this.menuButton.addEventListener('click', () => this.showHome(true));
+    // Esc opens and closes the menu over the game; in a text field it only leaves it.
+    window.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || this.island.current === NO_ISLAND) return;
+      const target = e.target as HTMLElement | null;
+      if (target?.tagName === 'INPUT') return target.blur();
+      this.showHome(!this.home.visible);
+    });
     this.pieces = new PieceLayer(world.scene);
     this.effects = new Effects(world.scene);
     decorateBeach(world.scene);

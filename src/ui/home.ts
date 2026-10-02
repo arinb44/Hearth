@@ -11,7 +11,7 @@ import {
   NO_OWNER,
 } from '../../spacetimedb/src/logic/islands';
 import type { DbConnection } from '../module_bindings';
-import type { Account, Island } from '../module_bindings/types';
+import type { Account, GameState, Island } from '../module_bindings/types';
 import { myIslandId } from '../net/queries';
 import { BuildsPanel } from './builds';
 import { colorDot } from './colors';
@@ -19,18 +19,47 @@ import { el, errorMessage } from './dom';
 import { FriendsPanel } from './friends';
 import type { Toast } from './toast';
 
+type Tab = 'islands' | 'friends' | 'builds' | 'profile';
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'islands', label: 'Islands' },
+  { id: 'friends', label: 'Friends' },
+  { id: 'builds', label: 'Builds' },
+  { id: 'profile', label: 'Profile' },
+];
+
+/** What an island is doing right now, for its row in the islands list. */
+function islandStatus(state: GameState | undefined): string {
+  switch (state?.phase.tag) {
+    case undefined:
+      return '';
+    case 'Lobby':
+      return 'in the lobby';
+    case 'Building':
+      return state.mode.tag === 'Battle' ? 'Build Battle' : 'building together';
+    case 'Showcase':
+    case 'Voting':
+      return 'voting on builds';
+    default:
+      return 'round ending';
+  }
+}
+
 /**
- * The main screen: create or recover an account, see your profile, stats, and
- * recovery code, pick an island, manage friends, and save or load builds. Everything
- * shown here is read live from the database.
+ * The main screen, and the menu over the game (☰ Menu or Esc): create or recover an
+ * account, then tabs for islands, friends, saved builds, and your profile. On an
+ * island it also offers Back to game and Exit to main menu. Everything shown here is
+ * read live from the database.
  */
 export class HomeScreen {
   private readonly root = document.getElementById('home')!;
   private readonly body = this.root.querySelector<HTMLElement>('.home-body')!;
-  // Re-rendered on its own, so live player counts never wipe a half-typed form.
+  // Re-rendered on their own, so live counts never wipe a half-typed form.
   private readonly islandList = el('ul', { className: 'islands' });
+  private readonly tabBar = el('nav', { className: 'home-tabs' });
   private readonly friends: FriendsPanel;
   private readonly builds: BuildsPanel;
+  private tab: Tab = 'islands';
   private codeVisible = false;
 
   constructor(
@@ -59,6 +88,13 @@ export class HomeScreen {
     conn.db.island.onInsert(refreshLists);
     conn.db.island.onUpdate(refreshLists);
     conn.db.island.onDelete(refreshLists);
+    const refreshIslands = () => this.renderIslands();
+    conn.db.gameState.onInsert(refreshIslands);
+    conn.db.gameState.onUpdate(refreshIslands);
+    conn.db.gameState.onDelete(refreshIslands);
+    const refreshTabs = () => this.renderTabs();
+    conn.db.friendRequest.onInsert(refreshTabs);
+    conn.db.friendRequest.onDelete(refreshTabs);
     conn.db.player.onInsert((_ctx, row) => {
       if (row.identity.toHexString() === myHex) this.render();
     });
@@ -94,6 +130,7 @@ export class HomeScreen {
     this.renderIslands();
     this.friends.render();
     this.builds.render();
+    this.renderTabs();
   }
 
   private call(action: Promise<void>, onDone?: () => void): void {
@@ -106,7 +143,7 @@ export class HomeScreen {
     if (this.root.hidden) return;
     const account = this.myAccount();
     this.body.replaceChildren(
-      ...(account ? this.profile(account) : this.welcome()),
+      ...(account ? this.signedIn(account) : this.welcome()),
     );
   }
 
@@ -208,15 +245,7 @@ export class HomeScreen {
       ),
     );
 
-    this.friends.render();
-    this.builds.render();
     return [
-      el(
-        'div',
-        { className: 'profile' },
-        colorDot(account.colorIndex),
-        el('strong', {}, account.username),
-      ),
       stats,
       el(
         'div',
@@ -232,10 +261,85 @@ export class HomeScreen {
         { className: 'muted small' },
         'Use it to sign in on another device. Keep it secret: anyone with it can use your account.',
       ),
-      ...this.islands(account),
-      this.friends.root,
-      this.builds.root,
     ];
+  }
+
+  /** Your name, the in-game buttons, the tab bar, and the open tab. */
+  private signedIn(account: Account): HTMLElement[] {
+    this.renderTabs();
+    return [
+      el(
+        'div',
+        { className: 'profile' },
+        colorDot(account.colorIndex),
+        el('strong', {}, account.username),
+      ),
+      ...this.gameButtons(),
+      this.tabBar,
+      ...this.tabContent(account),
+    ];
+  }
+
+  /** On an island, the menu leads back into the game or out to the main screen. */
+  private gameButtons(): HTMLElement[] {
+    if (myIslandId(this.conn, this.myHex) === NO_ISLAND) return [];
+    const back = el(
+      'button',
+      { type: 'button', className: 'play' },
+      'Back to game',
+    );
+    back.addEventListener('click', () => this.onEntered());
+    const exit = el(
+      'button',
+      { type: 'button', className: 'secondary' },
+      'Exit to main menu',
+    );
+    exit.addEventListener('click', () =>
+      this.call(this.conn.reducers.leaveIsland({})),
+    );
+    return [el('div', { className: 'menu-actions' }, back, exit)];
+  }
+
+  private tabContent(account: Account): HTMLElement[] {
+    switch (this.tab) {
+      case 'islands':
+        return this.islands(account);
+      case 'friends':
+        this.friends.render();
+        return [this.friends.root];
+      case 'builds':
+        this.builds.render();
+        return [this.builds.root];
+      case 'profile':
+        return this.profile(account);
+    }
+  }
+
+  /** The tab buttons; Friends counts the requests waiting for your answer. */
+  private renderTabs(): void {
+    const me = this.myAccount();
+    const waiting = me
+      ? [...this.conn.db.friendRequest.iter()].filter(
+          (r) => r.toAccountId === me.id,
+        ).length
+      : 0;
+    this.tabBar.replaceChildren(
+      ...TABS.map(({ id, label }) => {
+        const button = el(
+          'button',
+          { type: 'button', className: id === this.tab ? 'active' : '' },
+          label,
+        );
+        if (id === 'friends' && waiting > 0) {
+          button.append(el('span', { className: 'badge' }, String(waiting)));
+        }
+        button.addEventListener('click', () => {
+          this.tab = id;
+          this.render();
+        });
+        return button;
+      }),
+    );
   }
 
   private enter(islandId: bigint, button: HTMLButtonElement): void {
@@ -254,7 +358,7 @@ export class HomeScreen {
     const owned = [...this.conn.db.island.iter()].filter(
       (i) => i.ownerAccountId === account.id,
     ).length;
-    const out: HTMLElement[] = [el('h3', {}, 'Islands'), this.islandList];
+    const out: HTMLElement[] = [this.islandList];
 
     if (owned < MAX_ISLANDS_PER_ACCOUNT) {
       const name = el('input', {
@@ -276,24 +380,12 @@ export class HomeScreen {
       });
       out.push(create);
     }
-
-    if (myIslandId(this.conn, this.myHex) !== NO_ISLAND) {
-      const leave = el(
-        'button',
-        { type: 'button', className: 'link' },
-        'Leave island',
-      );
-      leave.addEventListener('click', () =>
-        this.call(this.conn.reducers.leaveIsland({})),
-      );
-      out.push(el('p', { className: 'muted small' }, leave));
-    }
     return out;
   }
 
   /** The main island, your islands, and any island with players on it. */
   private renderIslands(account = this.myAccount()): void {
-    if (this.root.hidden || !account) return;
+    if (this.root.hidden || !account || this.tab !== 'islands') return;
     const current = myIslandId(this.conn, this.myHex);
     const rank = (i: Island) =>
       i.ownerAccountId === NO_OWNER
@@ -331,12 +423,15 @@ export class HomeScreen {
             el(
               'span',
               { className: 'muted small' },
-              this.ownerLabel(island, account) +
-                ' · ' +
-                island.playerCount +
-                '/' +
-                MAX_ISLAND_PLAYERS +
-                ' online',
+              [
+                this.ownerLabel(island, account),
+                `${island.playerCount}/${MAX_ISLAND_PLAYERS} online`,
+                islandStatus(
+                  this.conn.db.gameState.islandId.find(island.id) ?? undefined,
+                ),
+              ]
+                .filter(Boolean)
+                .join(' · '),
             ),
           ),
           button,

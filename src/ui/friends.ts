@@ -49,7 +49,7 @@ export class FriendsPanel {
         () => (input.value = ''),
       );
     });
-    this.root.append(el('h3', {}, 'Friends'), form, this.list);
+    this.root.append(form, this.list);
 
     const refresh = () => this.render();
     for (const table of [conn.db.friendRequest, conn.db.friendship]) {

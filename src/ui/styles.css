@@ -1271,6 +1271,44 @@ canvas,
   font-size: 14px;
 }
 
+/* Menu: in-game buttons and tabs */
+.menu-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.home-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 12px;
+  background: rgba(31, 42, 55, 0.06);
+}
+
+.card .home-tabs button {
+  flex: 1;
+  padding: 7px 4px;
+  border-radius: 9px;
+  background: none;
+  color: inherit;
+  font-size: 13px;
+}
+
+.card .home-tabs button.active {
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(31, 42, 55, 0.15);
+}
+
+.home-tabs .badge {
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #fa5252;
+  color: #fff;
+  font-size: 11px;
+}
+
 /* Friends and saved builds */
 .home-section {
   display: grid;
