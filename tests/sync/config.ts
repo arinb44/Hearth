@@ -11,4 +11,6 @@ export const TEST_TIMING: RoundTiming = {
   scoringSeconds: 1,
   votingSeconds: 2,
   resultsSeconds: 1,
+  // Long, so tests step through the showcase with `skip_phase` and never race it.
+  showcaseSeconds: 30,
 };

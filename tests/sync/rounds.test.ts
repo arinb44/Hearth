@@ -41,6 +41,7 @@ describe('round engine', () => {
         scoringSeconds: 1,
         votingSeconds: 1,
         resultsSeconds: 1,
+        showcaseSeconds: 1,
       }),
     ).rejects.toThrow();
     expect(player.conn.db.config.id.find(0)!.buildSeconds).toBe(

@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import type { Identity } from 'spacetimedb';
-import { NO_ISLAND } from '../../spacetimedb/src/logic/islands';
+import { NO_ISLAND, SHARED_BOARD } from '../../spacetimedb/src/logic/islands';
 import { PLAYER_COLORS } from '../../spacetimedb/src/logic/players';
+import { boardOfPlot } from '../../spacetimedb/src/logic/plots';
 import { KeyboardMovement } from '../input/desktop';
 import { TouchJoystick } from '../input/touch';
 import type { DbConnection } from '../module_bindings';
@@ -9,10 +10,10 @@ import type { GameState, Piece, Player } from '../module_bindings/types';
 import { Avatar } from '../scene/avatars';
 import { PieceLayer } from '../scene/pieces';
 import { decorateBeach, Effects } from '../scene/effects';
-import { PlotLayer } from '../scene/plots';
 import type { World } from '../scene/world';
 import { ServerClock } from '../net/clock';
 import { IslandSubscription } from '../net/island';
+import { buildingInPrivate, myBuildBoard, shownBoard } from '../net/queries';
 import { ActivityFeed } from '../ui/feed';
 import { RoundHud } from '../ui/hud';
 import { HomeScreen } from '../ui/home';
@@ -31,7 +32,9 @@ function colorOf(p: Player): number {
 /**
  * Keeps the 3D scene and HUD in step with the subscribed SpacetimeDB tables. The
  * local player's own row says which island they are on; the game subscribes to that
- * island's rows and ignores anything left over from another island.
+ * island's rows and ignores anything left over from another island. It draws one
+ * board at a time: the shared board, or during a battle a private build (see
+ * `shownBoard`), and while a battle is built it only receives its own board.
  */
 export class Game {
   private readonly avatars = new Map<string, Avatar>();
@@ -46,13 +49,13 @@ export class Game {
   private readonly clock = new ServerClock();
   private readonly hud: RoundHud;
   private readonly results: ResultsView;
-  private readonly plots: PlotLayer;
   private readonly toast = new Toast();
   private readonly effects: Effects;
   private readonly menuButton = document.getElementById('menu-button')!;
   private readonly myHex: string;
   private readonly followTarget = new THREE.Vector3();
   private local: LocalPlayer | null = null;
+  private shown = SHARED_BOARD;
 
   constructor(
     private readonly world: World,
@@ -67,7 +70,6 @@ export class Game {
     );
     this.menuButton.addEventListener('click', () => this.showHome(true));
     this.pieces = new PieceLayer(world.scene);
-    this.plots = new PlotLayer(world.scene);
     this.effects = new Effects(world.scene);
     decorateBeach(world.scene);
     this.builder = new Builder(
@@ -85,13 +87,14 @@ export class Game {
       async () => {
         await conn.reducers.startRound({});
       },
+      () => this.refreshBoard(),
     );
     this.results = new ResultsView(conn, this.myHex);
 
     conn.db.piece.onInsert((_ctx, row) => this.onPiece(row));
     conn.db.piece.onUpdate((_ctx, _old, row) => this.onPiece(row));
     conn.db.piece.onDelete((_ctx, row) => {
-      if (!this.here(row)) return;
+      if (!this.here(row) || row.board !== this.shown) return;
       this.pieces.remove(row);
       this.hud.refresh();
     });
@@ -114,8 +117,11 @@ export class Game {
     conn.db.plotVote.onUpdate(refresh);
     conn.db.activity.onInsert((_ctx, event) => {
       if (!this.here(event)) return;
+      const build = event.kind === 'placed' || event.kind === 'removed';
+      // Someone else's private battle build stays private.
+      if (build && event.board !== this.shown) return;
       this.feed.add(event);
-      if (event.kind === 'placed' || event.kind === 'removed') {
+      if (build) {
         this.effects.puff(
           tileToWorld(event.tileX),
           tileToWorld(event.tileZ),
@@ -174,6 +180,7 @@ export class Game {
     this.island.switchTo(islandId);
     // Clear the old island now; its rows are ignored until they leave the cache.
     this.pieces.clear();
+    this.shown = SHARED_BOARD;
     for (const hex of [...this.avatars.keys()]) this.removeAvatar(hex);
     this.local = null;
     this.builder.setEnabled(false);
@@ -184,19 +191,35 @@ export class Game {
   }
 
   private onPiece(row: Piece): void {
-    if (!this.here(row)) return;
+    if (!this.here(row) || row.board !== this.shown) return;
     this.pieces.upsert(row);
     this.hud.refresh();
   }
 
   private onState(row: GameState, old?: GameState): void {
     if (!this.here(row)) return;
-    if (!old || old.phase.tag !== row.phase.tag || old.round !== row.round) {
+    const phaseChanged =
+      !old || old.phase.tag !== row.phase.tag || old.round !== row.round;
+    if (phaseChanged || old.showcaseBoard !== row.showcaseBoard) {
       // A fresh transition: its start time is a server timestamp from just now.
       if (old) this.clock.sample(row.phaseStartedAt.microsSinceUnixEpoch);
+    }
+    if (phaseChanged) {
       this.results.onPhase(row.phase.tag, row.round, row.islandId);
     }
+    if (
+      row.phase.tag === 'Showcase' &&
+      old?.showcaseBoard !== row.showcaseBoard
+    ) {
+      const builder = [...this.conn.db.plot.iter()].find(
+        (p) =>
+          p.islandId === row.islandId &&
+          boardOfPlot(p.plotIndex) === row.showcaseBoard,
+      );
+      if (builder) this.results.announce(`${builder.builderName}'s build`);
+    }
     this.refreshRound();
+    if (phaseChanged) this.refreshAvatars();
   }
 
   private onPlayer(row: Player, old?: Player): void {
@@ -204,7 +227,9 @@ export class Game {
     const isMe = hex === this.myHex;
     if (isMe) this.enterIsland(row.islandId);
 
-    if (!row.online || !this.here(row)) {
+    // While a battle is built, everyone is on a private island of their own.
+    const hidden = !isMe && buildingInPrivate(this.conn, this.myHex);
+    if (!row.online || !this.here(row) || hidden) {
       this.removeAvatar(hex);
       if (isMe) {
         this.local = null;
@@ -262,18 +287,35 @@ export class Game {
 
   private refreshRound(): void {
     this.hud.refresh();
-    const state =
-      this.island.current === NO_ISLAND
-        ? undefined
-        : this.conn.db.gameState.islandId.find(this.island.current);
-    const showPlots =
-      state?.mode.tag === 'Battle' && state.phase.tag !== 'Lobby';
-    this.plots.render(
-      showPlots
-        ? [...this.conn.db.plot.iter()].filter((p) => this.here(p))
+    this.refreshBoard();
+  }
+
+  /**
+   * Receives only your own board while a battle is built, every board otherwise,
+   * and redraws the scene when the board on show changes.
+   */
+  private refreshBoard(): void {
+    if (this.island.current === NO_ISLAND) return;
+    this.island.showBoard(
+      buildingInPrivate(this.conn, this.myHex)
+        ? (myBuildBoard(this.conn, this.myHex) ?? SHARED_BOARD)
         : null,
-      this.myHex,
     );
+    const board = shownBoard(this.conn, this.myHex, this.hud.previewBoard);
+    if (board === this.shown) return;
+    this.shown = board;
+    this.pieces.clear();
+    for (const p of this.conn.db.piece.iter()) {
+      if (this.here(p) && p.board === board) this.pieces.upsert(p);
+    }
+    this.hud.refresh();
+  }
+
+  /** Shows or hides other players, when a battle's private build starts or ends. */
+  private refreshAvatars(): void {
+    for (const p of [...this.conn.db.player.iter()]) {
+      if (this.here(p)) this.onPlayer(p);
+    }
   }
 
   private refreshList(): void {

@@ -14,7 +14,6 @@ import {
 } from '../spacetimedb/src/logic/movement';
 import { NO_OWNER } from '../spacetimedb/src/logic/islands';
 import { PIECE_KINDS } from '../spacetimedb/src/logic/pieces';
-import { plotCenter } from '../spacetimedb/src/logic/plots';
 
 const TARGETS = {
   local: { host: 'ws://127.0.0.1:3000', db: 'coop-builder' },
@@ -81,26 +80,12 @@ async function runBot(index: number, deadline: number): Promise<DbConnection> {
     [...conn.db.player.iter()].find((p) => p.identity.toHexString() === hex)!;
   let pos: Vec2 = { x: me().x, z: me().z };
   let waypoint = pos;
-  let lastRound = -1;
 
   while (Date.now() < deadline) {
-    const state = conn.db.gameState.islandId.find(islandId);
-    const myPlot = [...conn.db.plot.iter()].find(
-      (p) => p.islandId === islandId && p.builder.toHexString() === hex,
-    );
-    if (state && state.round !== lastRound) {
-      // Server may have moved us (battle plots): restart from where it put us.
-      lastRound = state.round;
-      pos = { x: me().x, z: me().z };
-      waypoint = pos;
-    }
-
     if (Math.hypot(waypoint.x - pos.x, waypoint.z - pos.z) < 0.3) {
-      const home = myPlot ? plotCenter(myPlot.plotIndex) : { x: 0, z: 0 };
-      const spread = myPlot ? 2.5 : 8;
       waypoint = clampToWorld({
-        x: home.x + (Math.random() - 0.5) * 2 * spread,
-        z: home.z + (Math.random() - 0.5) * 2 * spread,
+        x: (Math.random() - 0.5) * 16,
+        z: (Math.random() - 0.5) * 16,
       });
     }
     const dx = waypoint.x - pos.x;

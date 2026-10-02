@@ -1,37 +1,25 @@
-// Build Battle plots: the 24×24 island splits into a 3×3 grid of 8×8 plots.
+// Build Battle: every builder gets a private full-size board for the round, and then
+// everyone tours the builds and votes. A `plot` row records who builds on which board.
 // Pure TypeScript: must not import spacetimedb/server.
-import { GRID_SIZE, inBounds, tileToWorld, type Tile } from './grid';
-import type { Vec2 } from './movement';
 
-export const PLOTS_PER_SIDE = 3;
-export const PLOT_SIZE = GRID_SIZE / PLOTS_PER_SIDE;
-export const MAX_PLOTS = PLOTS_PER_SIDE * PLOTS_PER_SIDE;
+/** Builders per battle (everyone but the idea's host), one private board each. */
+export const MAX_PLOTS = 9;
 
-/** Plots in the order they are handed out: center first, then corners, then edges. */
-export const PLOT_ASSIGNMENT_ORDER = [4, 0, 2, 6, 8, 1, 3, 5, 7] as const;
-
-export function plotOfTile(tile: Tile): number | null {
-  if (!inBounds(tile.x, tile.z)) return null;
-  return (
-    Math.floor(tile.x / PLOT_SIZE) * PLOTS_PER_SIDE +
-    Math.floor(tile.z / PLOT_SIZE)
-  );
+/** `piece.board` of a builder's private board; board 0 is the island's shared board. */
+export function boardOfPlot(plotIndex: number): number {
+  return plotIndex + 1;
 }
 
-/** The tile at the plot's minimum corner. */
-export function plotOrigin(index: number): Tile {
-  return {
-    x: Math.floor(index / PLOTS_PER_SIDE) * PLOT_SIZE,
-    z: (index % PLOTS_PER_SIDE) * PLOT_SIZE,
-  };
-}
-
-/** World position of the plot's center, where its builder is placed at round start. */
-export function plotCenter(index: number): Vec2 {
-  const origin = plotOrigin(index);
-  const mid = (start: number) =>
-    (tileToWorld(start) + tileToWorld(start + PLOT_SIZE - 1)) / 2;
-  return { x: mid(origin.x), z: mid(origin.z) };
+/**
+ * The build to show after `current` in the showcase tour (start from 0, the shared
+ * board), in board order; null once every build has been shown.
+ */
+export function nextShowcase(
+  boards: readonly number[],
+  current: number,
+): number | null {
+  const next = [...boards].sort((a, b) => a - b).find((b) => b > current);
+  return next ?? null;
 }
 
 /** Winning plots: the most votes (at least one); ties share the win. */

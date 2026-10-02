@@ -49,6 +49,7 @@ export function createIslandRow(
     phaseStartedAt: ctx.timestamp,
     phaseEndsAt: undefined,
     teamScore: 0,
+    showcaseBoard: 0,
   });
   return created;
 }

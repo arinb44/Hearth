@@ -1,16 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { GRID_SIZE, tileToWorld } from '../../spacetimedb/src/logic/grid';
+import { tileToWorld } from '../../spacetimedb/src/logic/grid';
 import {
   checkModify,
   checkPlacement,
 } from '../../spacetimedb/src/logic/pieces';
 import {
+  boardOfPlot,
   MAX_PLOTS,
-  PLOT_ASSIGNMENT_ORDER,
-  PLOT_SIZE,
-  plotCenter,
-  plotOfTile,
-  plotOrigin,
+  nextShowcase,
   plotWinners,
 } from '../../spacetimedb/src/logic/plots';
 import {
@@ -78,38 +75,21 @@ describe('theme tally', () => {
   });
 });
 
-describe('plots', () => {
-  it('splits the grid into nine 8×8 plots that cover every tile once', () => {
-    expect(PLOT_SIZE * 3).toBe(GRID_SIZE);
-    const counts = new Map<number, number>();
-    for (let x = 0; x < GRID_SIZE; x++) {
-      for (let z = 0; z < GRID_SIZE; z++) {
-        const plot = plotOfTile({ x, z })!;
-        counts.set(plot, (counts.get(plot) ?? 0) + 1);
-      }
-    }
-    expect([...counts.keys()].sort()).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
-    expect([...counts.values()].every((n) => n === PLOT_SIZE * PLOT_SIZE)).toBe(
-      true,
-    );
-    expect(plotOfTile({ x: -1, z: 0 })).toBeNull();
+describe('battle boards', () => {
+  it('gives every builder a private board after the shared board 0', () => {
+    const boards = Array.from({ length: MAX_PLOTS }, (_, i) => boardOfPlot(i));
+    expect(boards[0]).toBe(1);
+    expect(new Set(boards).size).toBe(MAX_PLOTS);
+    expect(boards).not.toContain(0);
   });
 
-  it('puts each plot center inside its own plot', () => {
-    for (let i = 0; i < MAX_PLOTS; i++) {
-      const c = plotCenter(i);
-      const origin = plotOrigin(i);
-      expect(c.x).toBeGreaterThan(tileToWorld(origin.x));
-      expect(c.x).toBeLessThan(tileToWorld(origin.x + PLOT_SIZE - 1));
-    }
-    expect(plotCenter(4)).toEqual({ x: 0, z: 0 });
-  });
-
-  it('hands out every plot exactly once, center first', () => {
-    expect(PLOT_ASSIGNMENT_ORDER[0]).toBe(4);
-    expect([...PLOT_ASSIGNMENT_ORDER].sort()).toEqual([
-      0, 1, 2, 3, 4, 5, 6, 7, 8,
-    ]);
+  it('tours the builds in board order, then stops', () => {
+    const boards = [3, 1, 2];
+    expect(nextShowcase(boards, 0)).toBe(1);
+    expect(nextShowcase(boards, 1)).toBe(2);
+    expect(nextShowcase(boards, 2)).toBe(3);
+    expect(nextShowcase(boards, 3)).toBeNull();
+    expect(nextShowcase([], 0)).toBeNull();
   });
 
   it('finds winners, sharing ties, and none without votes', () => {
@@ -143,8 +123,7 @@ describe('plots', () => {
 });
 
 describe('battle build rules', () => {
-  const center = plotOrigin(4);
-  const tile = { x: center.x + 3, z: center.z + 3 };
+  const tile = { x: 12, z: 12 };
   const standing = { x: tileToWorld(tile.x), z: tileToWorld(tile.z) };
   const base = {
     kind: 'house',
@@ -155,22 +134,15 @@ describe('battle build rules', () => {
     playerPos: standing,
   };
 
-  it('allows building in your own plot', () => {
-    expect(checkPlacement({ ...base, plot: 4 })).toBeNull();
+  it('lets builders build anywhere on their own board', () => {
+    expect(checkPlacement(base)).toBeNull();
+    expect(checkPlacement({ ...base, watching: false })).toBeNull();
   });
 
-  it('rejects building in someone else’s plot', () => {
-    expect(checkPlacement({ ...base, plot: 0 })).toBe('outside_plot');
+  it('rejects hosts and spectators, who watch instead', () => {
+    expect(checkPlacement({ ...base, watching: true })).toBe('not_builder');
     expect(
-      checkModify({ ...base, contents: { ground: 'tree' }, plot: 0 }),
-    ).toBe('outside_plot');
-  });
-
-  it('rejects hosts and spectators, who have no plot', () => {
-    expect(checkPlacement({ ...base, plot: null })).toBe('not_builder');
-  });
-
-  it('applies no plot rule outside battles', () => {
-    expect(checkPlacement({ ...base, plot: undefined })).toBeNull();
+      checkModify({ ...base, contents: { ground: 'tree' }, watching: true }),
+    ).toBe('not_builder');
   });
 });

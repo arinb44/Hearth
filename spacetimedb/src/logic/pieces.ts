@@ -1,7 +1,6 @@
 // Piece catalog and building rules shared by the module (enforcement), the client
 // (ghost preview), and the tests. Pure TypeScript: must not import spacetimedb/server.
 import { inBounds, tileToWorld, type Tile } from './grid';
-import { plotOfTile } from './plots';
 import type { Vec2 } from './movement';
 
 // The first ten keep their 1–0 hotkeys; newer kinds are appended after them.
@@ -92,7 +91,6 @@ export type BuildError =
   | 'empty'
   | 'out_of_reach'
   | 'wrong_phase'
-  | 'outside_plot'
   | 'not_builder';
 
 export const BUILD_ERROR_MESSAGES: Record<BuildError, string> = {
@@ -104,7 +102,6 @@ export const BUILD_ERROR_MESSAGES: Record<BuildError, string> = {
   empty: 'Nothing to change on that tile',
   out_of_reach: 'Walk closer to build there',
   wrong_phase: 'Building is paused right now',
-  outside_plot: 'Build inside your own plot',
   not_builder: 'You are not building this round. Watch and vote!',
 };
 
@@ -128,20 +125,14 @@ interface TileAction {
   contents: TileContents;
   playerPos: Vec2;
   reachSlack?: number;
-  /**
-   * Build Battle restriction: the player's plot, or null if they have none (host or
-   * spectator). Undefined means no restriction (co-op and lobby).
-   */
-  plot?: number | null;
+  /** True for a battle's host and spectators, who watch the builders instead. */
+  watching?: boolean;
 }
 
 function checkTileAction(action: TileAction): BuildError | null {
   if (!inBounds(action.tile.x, action.tile.z)) return 'out_of_bounds';
   if (!canBuildInPhase(action.phase)) return 'wrong_phase';
-  if (action.plot === null) return 'not_builder';
-  if (action.plot !== undefined && plotOfTile(action.tile) !== action.plot) {
-    return 'outside_plot';
-  }
+  if (action.watching) return 'not_builder';
   if (!withinReach(action.playerPos, action.tile, action.reachSlack)) {
     return 'out_of_reach';
   }

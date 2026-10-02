@@ -2,16 +2,17 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Identity } from 'spacetimedb';
 import type { DbConnection } from '../../src/module_bindings';
 import { resultFor } from '../../src/net/queries';
-import { worldToTile } from '../../spacetimedb/src/logic/grid';
-import { plotOrigin } from '../../spacetimedb/src/logic/plots';
+import { boardOfPlot } from '../../spacetimedb/src/logic/plots';
 import { optionKey } from '../../spacetimedb/src/logic/themes';
 import {
   adminCall,
   connectClients,
+  connectWithAccount,
   disconnectAll,
   enterAll,
   newIsland,
   waitFor,
+  watchIsland,
   type TestClient,
 } from './helpers';
 
@@ -115,53 +116,80 @@ describe('theme vote and build battle', () => {
     ).rejects.toThrow();
   });
 
-  it('runs a battle: plot-only building, voting, and a tallied winner', async () => {
-    clients.push(...(await connectClients(4)));
-    const [host, b1, b2, b3] = clients;
-    await joinAll(clients, [
-      'Host',
-      'Builder One',
-      'Builder Two',
-      'Builder Three',
-    ]);
-    await startIdeaBattle(clients, host, 'Dragon Lair');
+  it('runs a battle: private boards, a synced showcase, voting, and a winner', async () => {
+    clients.push(...(await connectClients(3)));
+    const [host, b2, b3] = clients;
+    const b1 = await connectWithAccount('Bone');
+    clients.push(b1);
+    const everyone = [host, b1, b2, b3];
+    await enterAll(everyone, island, (i) => ['Host', '', 'Two', 'Three'][i]);
+    await startIdeaBattle(everyone, host, 'Dragon Lair');
 
-    const plots = [b1, b2, b3].map((b) => plotOf(host.conn, b.identity)!);
-    expect(new Set(plots).size).toBe(3);
+    const boardOf = (c: TestClient) =>
+      boardOfPlot(plotOf(host.conn, c.identity)!);
+    const boards = [b1, b2, b3].map(boardOf);
+    expect(new Set(boards).size).toBe(3);
 
-    // Builders are moved to their plot, so the tile under them is in reach and theirs.
-    const me = b1.conn.db.player.identity.find(b1.identity)!;
-    const ownTile = { x: worldToTile(me.x), z: worldToTile(me.z) };
-    await b1.conn.reducers.placePiece({
-      kind: 'tower',
-      tileX: ownTile.x,
-      tileZ: ownTile.z,
-      rotation: 0,
-    });
-
-    const elsewhere = plotOrigin(plots[1]);
+    // Each builder has a private full board: the same tile holds a piece on each.
+    const center = { tileX: 12, tileZ: 12, rotation: 0 };
+    await b1.conn.reducers.placePiece({ kind: 'tower', ...center });
+    await b2.conn.reducers.placePiece({ kind: 'rock', ...center });
     await expect(
-      b1.conn.reducers.placePiece({
-        kind: 'rock',
-        tileX: elsewhere.x,
-        tileZ: elsewhere.z,
-        rotation: 0,
-      }),
-    ).rejects.toThrow(/own plot/);
-    const hostPos = host.conn.db.player.identity.find(host.identity)!;
-    await expect(
-      host.conn.reducers.placePiece({
-        kind: 'rock',
-        tileX: worldToTile(hostPos.x),
-        tileZ: worldToTile(hostPos.z),
-        rotation: 0,
-      }),
+      host.conn.reducers.placePiece({ kind: 'rock', ...center }),
     ).rejects.toThrow(/not building/);
 
+    // Subscribed the way the browser is while building: only one board arrives.
+    const watcher = await watchIsland(island);
+    watcher.sub.showBoard(boardOf(b2));
+    const boardsSeen = () =>
+      new Set(
+        [...watcher.conn.db.piece.iter()]
+          .filter((p) => p.islandId === island)
+          .map((p) => p.board),
+      );
+    try {
+      await waitFor(() => boardsSeen().has(boardOf(b2)), "Two's rock");
+      expect(boardsSeen()).toEqual(new Set([boardOf(b2)]));
+
+      // Saving during a battle keeps your own build.
+      await b1.conn.reducers.saveBuild({ name: 'Lair' });
+      await waitFor(() => b1.conn.db.savedBuild.count() === 1n, 'saved');
+      expect([...b1.conn.db.savedBuild.iter()][0].pieces).toEqual([
+        { kind: 'tower', tileX: 12, tileZ: 12, rotation: 0 },
+      ]);
+
+      // The showcase walks every client through the builds, in board order.
+      const sorted = [...boards].sort((a, b) => a - b);
+      for (const board of sorted) {
+        adminCall('skip_phase', String(island));
+        for (const c of everyone) {
+          await waitFor(
+            () =>
+              state(c.conn).phase.tag === 'Showcase' &&
+              state(c.conn).showcaseBoard === board,
+            `showing board ${board}`,
+          );
+        }
+        const ends = everyone.map(
+          (c) => state(c.conn).phaseEndsAt!.microsSinceUnixEpoch,
+        );
+        expect(new Set(ends).size).toBe(1);
+      }
+      watcher.sub.showBoard(null);
+      await waitFor(
+        () => boardsSeen().has(boardOf(b1)),
+        'every build arrives after the private phase',
+      );
+    } finally {
+      watcher.conn.disconnect();
+    }
+
     adminCall('skip_phase', String(island));
-    for (const c of clients) {
+    for (const c of everyone) {
       await waitFor(() => state(c.conn).phase.tag === 'Voting', 'voting phase');
     }
+    expect(state(host.conn).showcaseBoard).toBe(0);
+    const plots = [b1, b2].map((b) => plotOf(host.conn, b.identity)!);
     await expect(
       b1.conn.reducers.votePlot({ plotIndex: plots[0] }),
     ).rejects.toThrow();
@@ -173,7 +201,7 @@ describe('theme vote and build battle', () => {
 
     const round = state(host.conn).round;
     adminCall('skip_phase', String(island));
-    for (const c of clients) {
+    for (const c of everyone) {
       await waitFor(
         () => resultFor(c.conn, island, round) !== undefined,
         'battle result',
@@ -184,10 +212,11 @@ describe('theme vote and build battle', () => {
     expect(result.themeTitle).toBe('Dragon Lair');
     expect(result.score).toBe(3);
     expect(result.contributions[0]).toMatchObject({
-      name: 'Builder One',
+      name: b1.username,
       votes: 3,
       pieces: 1,
     });
+    expect(result.contributions.find((c) => c.name === 'Two')?.pieces).toBe(1);
     expect(result.contributions.map((c) => c.name)).not.toContain('Host');
     expect(state(b2.conn).phase.tag).toBe('Results');
   });

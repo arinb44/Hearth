@@ -16,4 +16,5 @@ export default {
   scoringSeconds: __t.u32(),
   votingSeconds: __t.u32(),
   resultsSeconds: __t.u32(),
+  showcaseSeconds: __t.u32(),
 };

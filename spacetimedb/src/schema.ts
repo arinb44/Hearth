@@ -12,6 +12,7 @@ export const Phase = t.enum('Phase', [
   'Scoring',
   'Voting',
   'Results',
+  'Showcase',
 ]);
 export const Mode = t.enum('Mode', ['Coop', 'Battle']);
 
@@ -30,7 +31,8 @@ const island = table(
 );
 
 // One row per island describing its round state. Clients render the HUD and
-// countdown from it; only reducers (and the phase timer) change it.
+// countdown from it; only reducers (and the phase timer) change it. During a battle's
+// Showcase, `showcaseBoard` is the build on show (0 otherwise).
 const gameState = table(
   { name: 'game_state', public: true },
   {
@@ -44,6 +46,7 @@ const gameState = table(
     phaseStartedAt: t.timestamp(),
     phaseEndsAt: t.option(t.timestamp()),
     teamScore: t.u32(),
+    showcaseBoard: t.u8(),
   },
 );
 
@@ -58,6 +61,7 @@ const config = table(
     scoringSeconds: t.u32(),
     votingSeconds: t.u32(),
     resultsSeconds: t.u32(),
+    showcaseSeconds: t.u32(),
   },
 );
 
@@ -151,11 +155,13 @@ const piece = table(
 );
 
 // Event table: rows are broadcast to subscribers once and never stored client-side.
-// Drives the activity feed and placement effects.
+// Drives the activity feed and placement effects; `board` keeps a battle builder's
+// private placements off everyone else's screen.
 const activity = table(
   { name: 'activity', public: true, event: true },
   {
     islandId: t.u64(),
+    board: t.u8(),
     kind: t.string(),
     actorName: t.string(),
     colorIndex: t.u8(),
@@ -187,8 +193,9 @@ const themeVote = table(
   },
 );
 
-// Build Battle: each builder's plot for the current round, and the best-build vote.
-// `plotKey` (island and plot) is unique, so a plot has one builder per island.
+// Build Battle: each builder's private board for the current round (board
+// `plotIndex + 1`), and the best-build vote. `plotKey` (island and plot) is unique, so
+// a board has one builder per island.
 const plot = table(
   { name: 'plot', public: true },
   {

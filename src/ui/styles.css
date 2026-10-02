@@ -611,6 +611,28 @@ body {
   grid-row: 2;
 }
 
+/* Battle vote: look at a build (left), vote for it (right). */
+.vote-row {
+  display: flex;
+  gap: 4px;
+}
+
+.vote-row button[data-board] {
+  flex: 1;
+  min-width: 0;
+}
+
+.choice-list button.looking {
+  border-color: #4dabf7;
+  background: #e7f5ff;
+}
+
+.choice-list button.vote {
+  display: block;
+  flex: none;
+  font-weight: 700;
+}
+
 .voters {
   grid-column: 2;
   grid-row: 1 / span 2;
@@ -653,21 +675,6 @@ body {
   font: inherit;
   font-weight: 700;
   cursor: pointer;
-}
-
-.plot-label {
-  padding: 2px 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.8);
-  border: 2px solid var(--player-color, #888);
-  font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.plot-label-mine {
-  background: var(--player-color, #888);
-  color: #fff;
 }
 
 .confetti {

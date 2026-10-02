@@ -32,7 +32,7 @@ export class ResultsView {
     if (phase === 'Scoring') {
       this.showBanner(result?.completed ? 'Three stars! 🎉' : "Time's up!");
     } else if (phase === 'Voting') {
-      this.showBanner("Time's up! Vote for the best build");
+      this.showBanner('Vote for the best build!');
     }
     const show = phase === 'Results' && !!result;
     this.root.hidden = !show;
@@ -44,6 +44,11 @@ export class ResultsView {
     window.clearTimeout(this.bannerTimer);
     this.banner.hidden = true;
     this.root.hidden = true;
+  }
+
+  /** A short banner over the game, like the name on a showcased build. */
+  announce(text: string): void {
+    this.showBanner(text);
   }
 
   private showBanner(text: string): void {
@@ -102,9 +107,10 @@ export class ResultsView {
     for (const c of result.contributions) {
       const li = document.createElement('li');
       const detail = document.createElement('em');
+      const pieces = `${c.pieces} piece${c.pieces === 1 ? '' : 's'}`;
       detail.textContent = battle
-        ? `${c.votes} vote${c.votes === 1 ? '' : 's'} · ${c.pieces} pieces`
-        : `${c.pieces} piece${c.pieces === 1 ? '' : 's'}`;
+        ? `${c.votes} vote${c.votes === 1 ? '' : 's'} · ${pieces}`
+        : pieces;
       li.append(colorDot(c.colorIndex), c.name, detail);
       list.append(li);
     }

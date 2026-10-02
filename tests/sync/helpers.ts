@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import type { Identity } from 'spacetimedb';
 import { DbConnection } from '../../src/module_bindings';
+import { IslandSubscription } from '../../src/net/island';
 import { NO_ISLAND } from '../../spacetimedb/src/logic/islands';
 import { SPACETIME_CLI, TEST_DB, TEST_HOST } from './config';
 
@@ -36,6 +37,27 @@ export function connectClients(count: number): Promise<TestClient[]> {
 export function disconnectAll(clients: TestClient[]): void {
   for (const client of clients) client.conn.disconnect();
   clients.length = 0;
+}
+
+export interface IslandWatcher {
+  conn: DbConnection;
+  sub: IslandSubscription;
+}
+
+/** A client subscribed the way the browser is: to one island's rows only. */
+export function watchIsland(islandId: bigint): Promise<IslandWatcher> {
+  return new Promise((resolve, reject) => {
+    DbConnection.builder()
+      .withUri(TEST_HOST)
+      .withDatabaseName(TEST_DB)
+      .onConnect((conn) => {
+        const sub = new IslandSubscription(conn, (m) => reject(new Error(m)));
+        sub.switchTo(islandId);
+        resolve({ conn, sub });
+      })
+      .onConnectError((_ctx, error) => reject(error))
+      .build();
+  });
 }
 
 /** Polls until `check` passes, so assertions wait for subscription updates to land. */

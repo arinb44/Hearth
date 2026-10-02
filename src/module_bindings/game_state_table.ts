@@ -30,4 +30,5 @@ export default __t.row({
   phaseStartedAt: __t.timestamp().name("phase_started_at"),
   phaseEndsAt: __t.option(__t.timestamp()).name("phase_ends_at"),
   teamScore: __t.u32().name("team_score"),
+  showcaseBoard: __t.u8().name("showcase_board"),
 });

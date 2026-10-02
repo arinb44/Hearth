@@ -9,6 +9,7 @@ import {
   OVERLAY,
   type TileContents,
 } from '../../spacetimedb/src/logic/pieces';
+import { boardOfPlot, plotWinners } from '../../spacetimedb/src/logic/plots';
 import type { DbConnection } from '../module_bindings';
 import type {
   GameState,
@@ -40,7 +41,7 @@ export function myGameState(
 }
 
 /**
- * The piece on one layer of an island's tile, from the client cache. `cell_key` is
+ * The piece on one layer of a board's tile, from the client cache. `cell_key` is
  * unique, and at runtime the client index is a unique index with `find` (no
  * `filter`), but the generated typings declare it as a range index, so narrow it to
  * what the runtime provides.
@@ -50,11 +51,11 @@ export function pieceAt(
   islandId: bigint,
   tile: Tile,
   layer = GROUND,
+  board = SHARED_BOARD,
 ): Piece | undefined {
   const index = conn.db.piece.cellKey as unknown as UniqueLookup;
-  return (
-    index.find(cellKey(islandId, tileKey(tile.x, tile.z), layer)) ?? undefined
-  );
+  const key = cellKey(islandId, tileKey(tile.x, tile.z), layer, board);
+  return index.find(key) ?? undefined;
 }
 
 /** The kinds on a tile's ground and overlay layers, for the shared build rules. */
@@ -62,10 +63,11 @@ export function tileContents(
   conn: DbConnection,
   islandId: bigint,
   tile: Tile,
+  board = SHARED_BOARD,
 ): TileContents {
   return {
-    ground: pieceAt(conn, islandId, tile, GROUND)?.kind,
-    overlay: pieceAt(conn, islandId, tile, OVERLAY)?.kind,
+    ground: pieceAt(conn, islandId, tile, GROUND, board)?.kind,
+    overlay: pieceAt(conn, islandId, tile, OVERLAY, board)?.kind,
   };
 }
 
@@ -103,13 +105,71 @@ export function myPlot(conn: DbConnection, myHex: string): Plot | undefined {
   return undefined;
 }
 
-/** Mirrors the server's battle build rule for the ghost preview (see `checkTileAction`). */
-export function buildRestriction(
+/**
+ * The board the local player builds on (mirrors the module's `buildBoard`): their
+ * private board while a battle is built, null for its host and spectators, and
+ * otherwise the island's shared board.
+ */
+export function myBuildBoard(conn: DbConnection, myHex: string): number | null {
+  const state = myGameState(conn, myHex);
+  if (state?.mode.tag !== 'Battle' || state.phase.tag !== 'Building') {
+    return SHARED_BOARD;
+  }
+  const plot = myPlot(conn, myHex);
+  return plot ? boardOfPlot(plot.plotIndex) : null;
+}
+
+/** True while a battle is being built: everyone works on a private board, unseen. */
+export function buildingInPrivate(conn: DbConnection, myHex: string): boolean {
+  const state = myGameState(conn, myHex);
+  return state?.mode.tag === 'Battle' && state.phase.tag === 'Building';
+}
+
+/** The private boards of the island's current battle, in showcase order. */
+export function battleBoards(conn: DbConnection, myHex: string): number[] {
+  const islandId = myIslandId(conn, myHex);
+  return [...conn.db.plot.iter()]
+    .filter((p) => p.islandId === islandId)
+    .map((p) => boardOfPlot(p.plotIndex))
+    .sort((a, b) => a - b);
+}
+
+/** The battle's winning board from the live plot votes, if anyone got a vote. */
+function winningBoard(conn: DbConnection, myHex: string): number | undefined {
+  const islandId = myIslandId(conn, myHex);
+  const tally = new Map<number, number>();
+  for (const v of conn.db.plotVote.iter()) {
+    if (v.islandId === islandId)
+      tally.set(v.plotIndex, (tally.get(v.plotIndex) ?? 0) + 1);
+  }
+  const [winner] = plotWinners(tally);
+  return winner === undefined ? undefined : boardOfPlot(winner);
+}
+
+/**
+ * The board this client shows. In a battle: your own build while building (the empty
+ * shared board for the host and spectators), the build on show in the showcase, the
+ * build you are looking at while voting, and the winner's at the results. Otherwise
+ * the island's shared board.
+ */
+export function shownBoard(
   conn: DbConnection,
   myHex: string,
-): number | null | undefined {
+  preview: number | null,
+): number {
   const state = myGameState(conn, myHex);
-  if (state?.mode.tag !== 'Battle' || state.phase.tag !== 'Building')
-    return undefined;
-  return myPlot(conn, myHex)?.plotIndex ?? null;
+  if (state?.mode.tag !== 'Battle') return SHARED_BOARD;
+  const first = battleBoards(conn, myHex)[0] ?? SHARED_BOARD;
+  switch (state.phase.tag) {
+    case 'Building':
+      return myBuildBoard(conn, myHex) ?? SHARED_BOARD;
+    case 'Showcase':
+      return state.showcaseBoard;
+    case 'Voting':
+      return preview ?? first;
+    case 'Results':
+      return winningBoard(conn, myHex) ?? first;
+    default:
+      return SHARED_BOARD;
+  }
 }

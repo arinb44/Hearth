@@ -47,6 +47,7 @@ export default function setup(): void {
       t.scoringSeconds,
       t.votingSeconds,
       t.resultsSeconds,
+      t.showcaseSeconds,
     ].map(String),
     '--server',
     'local',

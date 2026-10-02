@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { DbConnection } from '../../src/module_bindings';
-import { IslandSubscription } from '../../src/net/island';
+import type { DbConnection } from '../../src/module_bindings';
 import { pieceAt } from '../../src/net/queries';
 import {
   defaultIslandName,
@@ -8,7 +7,6 @@ import {
   MAX_ISLANDS_PER_ACCOUNT,
   NO_ISLAND,
 } from '../../spacetimedb/src/logic/islands';
-import { TEST_DB, TEST_HOST } from './config';
 import {
   connectClient,
   connectClients,
@@ -16,29 +14,10 @@ import {
   enterAll,
   newIsland,
   waitFor,
+  watchIsland,
+  type IslandWatcher,
   type TestClient,
 } from './helpers';
-
-interface IslandWatcher {
-  conn: DbConnection;
-  sub: IslandSubscription;
-}
-
-/** A client subscribed the way the browser is: to one island's rows only. */
-function watchIsland(islandId: bigint): Promise<IslandWatcher> {
-  return new Promise((resolve, reject) => {
-    DbConnection.builder()
-      .withUri(TEST_HOST)
-      .withDatabaseName(TEST_DB)
-      .onConnect((conn) => {
-        const sub = new IslandSubscription(conn, (m) => reject(new Error(m)));
-        sub.switchTo(islandId);
-        resolve({ conn, sub });
-      })
-      .onConnectError((_ctx, error) => reject(error))
-      .build();
-  });
-}
 
 /** Every island id present in the watcher's cache, across the island tables. */
 function islandsInCache(conn: DbConnection): Set<bigint> {

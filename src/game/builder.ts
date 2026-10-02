@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { tileToWorld, type Tile } from '../../spacetimedb/src/logic/grid';
+import { SHARED_BOARD } from '../../spacetimedb/src/logic/islands';
 import type { Vec2 } from '../../spacetimedb/src/logic/movement';
 import {
   BUILD_ERROR_MESSAGES,
@@ -16,7 +17,7 @@ import { PointerInput } from '../input/pointer';
 import { IS_TOUCH } from '../input/touch';
 import type { DbConnection } from '../module_bindings';
 import {
-  buildRestriction,
+  myBuildBoard,
   myGameState,
   myIslandId,
   tileContents,
@@ -126,7 +127,7 @@ export class Builder {
     // or for battle hosts and spectators.
     const canBuild =
       canBuildInPhase(this.phase()) &&
-      buildRestriction(this.conn, this.myHex) !== null;
+      myBuildBoard(this.conn, this.myHex) !== null;
     if (canBuild !== this.canBuildShown) {
       this.canBuildShown = canBuild;
       this.palette.setVisible(canBuild);
@@ -186,8 +187,19 @@ export class Builder {
     return myGameState(this.conn, this.myHex)?.phase.tag ?? 'Lobby';
   }
 
+  /** What stands on a tile of the board the player builds on. */
   private contents(tile: Tile): TileContents {
-    return tileContents(this.conn, myIslandId(this.conn, this.myHex), tile);
+    const board = myBuildBoard(this.conn, this.myHex) ?? SHARED_BOARD;
+    return tileContents(
+      this.conn,
+      myIslandId(this.conn, this.myHex),
+      tile,
+      board,
+    );
+  }
+
+  private watching(): boolean {
+    return myBuildBoard(this.conn, this.myHex) === null;
   }
 
   /**
@@ -214,7 +226,7 @@ export class Builder {
       phase: this.phase(),
       contents,
       playerPos,
-      plot: buildRestriction(this.conn, this.myHex),
+      watching: this.watching(),
     });
   }
 
@@ -228,7 +240,7 @@ export class Builder {
       phase: this.phase(),
       contents,
       playerPos,
-      plot: buildRestriction(this.conn, this.myHex),
+      watching: this.watching(),
     });
   }
 

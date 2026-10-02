@@ -10,10 +10,9 @@ import {
 } from './logic/islands';
 import { secondsToMicros, type RoundTiming } from './logic/phases';
 import {
+  boardOfPlot,
   MAX_PLOTS,
-  PLOT_ASSIGNMENT_ORDER,
-  plotCenter,
-  plotOfTile,
+  nextShowcase,
   plotWinners,
 } from './logic/plots';
 import { scoreBoard } from './logic/scoring';
@@ -28,7 +27,8 @@ import {
 import { addStats } from './accounts';
 import type { Ctx } from './schema';
 
-type PhaseTag = 'Lobby' | 'Building' | 'Scoring' | 'Voting' | 'Results';
+type PhaseTag =
+  'Lobby' | 'Building' | 'Scoring' | 'Showcase' | 'Voting' | 'Results';
 type GameStateRow = ReturnType<typeof requireGameState>;
 
 export function requireGameState(ctx: Ctx, islandId: bigint) {
@@ -191,7 +191,7 @@ function clearRoundTables(ctx: Ctx, islandId: bigint): void {
   }
 }
 
-/** Gives each online builder (everyone but the host, up to 9) a plot and moves them there. */
+/** Gives each online builder (everyone but the host, up to MAX_PLOTS) a private board. */
 function assignPlots(
   ctx: Ctx,
   islandId: bigint,
@@ -200,8 +200,7 @@ function assignPlots(
   const builders = onlinePlayers(ctx, islandId)
     .filter((p) => !(host && p.identity.equals(host)))
     .slice(0, MAX_PLOTS);
-  builders.forEach((p, i) => {
-    const plotIndex = PLOT_ASSIGNMENT_ORDER[i];
+  builders.forEach((p, plotIndex) => {
     ctx.db.plot.insert({
       id: 0n,
       islandId,
@@ -210,14 +209,6 @@ function assignPlots(
       plotIndex,
       builderName: p.name,
       colorIndex: p.colorIndex,
-    });
-    const center = plotCenter(plotIndex);
-    ctx.db.player.identity.update({
-      ...p,
-      x: center.x,
-      z: center.z,
-      moveBudget: 0,
-      lastMoveAt: ctx.timestamp,
     });
   });
 }
@@ -234,6 +225,7 @@ export function beginRound(ctx: Ctx, islandId: bigint): void {
     themeTitle: choice.themeTitle,
     host: choice.host,
     teamScore: 0,
+    showcaseBoard: SHARED_BOARD,
   });
 }
 
@@ -263,13 +255,13 @@ function coopContributions(ctx: Ctx, islandId: bigint) {
 
 /**
  * Ends the Building phase when its time is up: co-op rounds score the shared board
- * (three stars is a win for everyone there), battle rounds move to voting.
+ * (three stars is a win for everyone there), battle rounds start the showcase tour.
  */
 function finishBuilding(ctx: Ctx, islandId: bigint): void {
   const state = requireGameState(ctx, islandId);
   const timing = requireTiming(ctx);
   if (state.mode.tag === 'Battle') {
-    setPhase(ctx, islandId, 'Voting', timing.votingSeconds);
+    showNextBuild(ctx, islandId, SHARED_BOARD);
     return;
   }
   const board = [...ctx.db.piece.islandId.filter(islandId)].filter(
@@ -296,6 +288,27 @@ function finishBuilding(ctx: Ctx, islandId: bigint): void {
   });
 }
 
+/**
+ * The showcase tour: every client shows the same build, one at a time, in board
+ * order; after the last one the vote opens.
+ */
+function showNextBuild(ctx: Ctx, islandId: bigint, current: number): void {
+  const timing = requireTiming(ctx);
+  const boards = [...ctx.db.plot.islandId.filter(islandId)].map((p) =>
+    boardOfPlot(p.plotIndex),
+  );
+  const next = nextShowcase(boards, current);
+  if (next === null) {
+    setPhase(ctx, islandId, 'Voting', timing.votingSeconds, {
+      showcaseBoard: SHARED_BOARD,
+    });
+  } else {
+    setPhase(ctx, islandId, 'Showcase', timing.showcaseSeconds, {
+      showcaseBoard: next,
+    });
+  }
+}
+
 /** Ends the Voting phase: tallies plot votes and records the battle result. */
 function finishVoting(ctx: Ctx, islandId: bigint): void {
   const state = requireGameState(ctx, islandId);
@@ -305,12 +318,9 @@ function finishVoting(ctx: Ctx, islandId: bigint): void {
     const current = tally.get(v.plotIndex);
     if (current !== undefined) tally.set(v.plotIndex, current + 1);
   }
-  const piecesInPlot = new Map<number, number>();
+  const piecesOnBoard = new Map<number, number>();
   for (const p of ctx.db.piece.islandId.filter(islandId)) {
-    const index = plotOfTile({ x: p.tileX, z: p.tileZ });
-    if (index !== null) {
-      piecesInPlot.set(index, (piecesInPlot.get(index) ?? 0) + 1);
-    }
+    piecesOnBoard.set(p.board, (piecesOnBoard.get(p.board) ?? 0) + 1);
   }
   const winners = plotWinners(tally);
   const winningBuilders = plots.filter((p) => winners.includes(p.plotIndex));
@@ -322,7 +332,7 @@ function finishVoting(ctx: Ctx, islandId: bigint): void {
     .map((p) => ({
       name: p.builderName,
       colorIndex: p.colorIndex,
-      pieces: piecesInPlot.get(p.plotIndex) ?? 0,
+      pieces: piecesOnBoard.get(boardOfPlot(p.plotIndex)) ?? 0,
       votes: tally.get(p.plotIndex) ?? 0,
     }))
     .sort((a, b) => b.votes - a.votes || b.pieces - a.pieces);
@@ -344,20 +354,32 @@ function finishVoting(ctx: Ctx, islandId: bigint): void {
   });
 }
 
-/** During a battle build: the player's plot, or null for host and spectators. */
-export function buildRestriction(
+/** The private board of `who` in the island's current (or just finished) battle. */
+export function battleBoard(
   ctx: Ctx,
   islandId: bigint,
   who: Identity,
-): number | null | undefined {
-  const state = requireGameState(ctx, islandId);
-  if (state.mode.tag !== 'Battle' || state.phase.tag !== 'Building') {
-    return undefined;
-  }
+): number | null {
   for (const p of ctx.db.plot.builder.filter(who)) {
-    if (p.islandId === islandId) return p.plotIndex;
+    if (p.islandId === islandId) return boardOfPlot(p.plotIndex);
   }
   return null;
+}
+
+/**
+ * The board `who` builds on: their private board while a battle is being built (null
+ * for the host and spectators, who watch), otherwise the island's shared board.
+ */
+export function buildBoard(
+  ctx: Ctx,
+  islandId: bigint,
+  who: Identity,
+): number | null {
+  const state = requireGameState(ctx, islandId);
+  if (state.mode.tag !== 'Battle' || state.phase.tag !== 'Building') {
+    return SHARED_BOARD;
+  }
+  return battleBoard(ctx, islandId, who);
 }
 
 /** Empty board, no ideas or votes, back to an idle lobby. */
@@ -366,7 +388,11 @@ export function resetToLobby(ctx: Ctx, islandId: bigint): void {
   for (const i of [...ctx.db.idea.islandId.filter(islandId)]) {
     ctx.db.idea.id.delete(i.id);
   }
-  setPhase(ctx, islandId, 'Lobby', null, { teamScore: 0, host: undefined });
+  setPhase(ctx, islandId, 'Lobby', null, {
+    teamScore: 0,
+    host: undefined,
+    showcaseBoard: SHARED_BOARD,
+  });
   ensureLobbyTimer(ctx, islandId);
 }
 
@@ -384,6 +410,9 @@ export function advance(ctx: Ctx, islandId: bigint): void {
       break;
     case 'Scoring':
       setPhase(ctx, islandId, 'Results', timing.resultsSeconds);
+      break;
+    case 'Showcase':
+      showNextBuild(ctx, islandId, state.showcaseBoard);
       break;
     case 'Voting':
       finishVoting(ctx, islandId);

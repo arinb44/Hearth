@@ -33,6 +33,7 @@ export type AccountSecret = __Infer<typeof AccountSecret>;
 
 export const Activity = __t.object("Activity", {
   islandId: __t.u64(),
+  board: __t.u8(),
   kind: __t.string(),
   actorName: __t.string(),
   colorIndex: __t.u8(),
@@ -54,6 +55,7 @@ export const Config = __t.object("Config", {
   scoringSeconds: __t.u32(),
   votingSeconds: __t.u32(),
   resultsSeconds: __t.u32(),
+  showcaseSeconds: __t.u32(),
 });
 export type Config = __Infer<typeof Config>;
 
@@ -98,6 +100,7 @@ export const GameState = __t.object("GameState", {
   phaseStartedAt: __t.timestamp(),
   phaseEndsAt: __t.option(__t.timestamp()),
   teamScore: __t.u32(),
+  showcaseBoard: __t.u8(),
 });
 export type GameState = __Infer<typeof GameState>;
 
@@ -137,6 +140,7 @@ export const Phase = __t.enum("Phase", {
   Scoring: __t.unit(),
   Voting: __t.unit(),
   Results: __t.unit(),
+  Showcase: __t.unit(),
 });
 export type Phase = __Infer<typeof Phase>;
 

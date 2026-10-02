@@ -64,3 +64,4 @@
 | 2026-10-04 | — | Commit M9a | Commit locally / not yet | Commit locally; push with the Revision 6 Maincloud publish (pushing earlier would deploy a client the live schema can't serve) |
 | 2026-10-04 | — | Local databases during Revision 6 | Wipe and republish as needed / ask each time | Wipe and republish local preview and dev DBs (`coop-builder-r6`, `coop-builder-m8c`, `coop-builder-preview`, `coop-builder`) as needed; Maincloud still needs its own approval |
 | 2026-10-04 | — | Commit M9b | Commit and continue / commit and stop / not yet | Commit locally and continue with M9c |
+| 2026-10-04 | — | Commit M9c | Commit and continue / commit and stop / not yet | Commit locally and continue with M9d |

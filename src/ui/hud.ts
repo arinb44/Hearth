@@ -1,4 +1,5 @@
 import { challengeById } from '../../spacetimedb/src/logic/challenges';
+import { boardOfPlot } from '../../spacetimedb/src/logic/plots';
 import {
   pointsToNextStar,
   scoreBoard,
@@ -6,7 +7,7 @@ import {
 } from '../../spacetimedb/src/logic/scoring';
 import type { DbConnection } from '../module_bindings';
 import type { ServerClock } from '../net/clock';
-import { myGameState, myPlot, sharedBoard } from '../net/queries';
+import { battleBoards, myGameState, myPlot, sharedBoard } from '../net/queries';
 import { PlotVotePanel } from './battle';
 import { COMPACT } from './layout';
 import { LobbyPanel } from './lobby';
@@ -16,6 +17,7 @@ const PHASE_LABELS: Record<string, string> = {
   Lobby: 'Lobby',
   Building: 'Build!',
   Scoring: 'Scoring',
+  Showcase: 'Showcase',
   Voting: 'Vote!',
   Results: 'Results',
 };
@@ -51,7 +53,8 @@ function scoreLine(
 
 /**
  * Top-center round card. Lobby: the theme ballot and idea input. Co-op: the theme,
- * the live score, and the combos found. Battle: your role, then the best-build vote.
+ * the live score, and the combos found. Battle: your role, the showcase tour, then
+ * the best-build vote.
  */
 export class RoundHud {
   private readonly root = document.getElementById('round')!;
@@ -76,9 +79,10 @@ export class RoundHud {
     private readonly myHex: string,
     toast: Toast,
     onStart: () => Promise<void>,
+    onPreview: () => void,
   ) {
     this.lobby = new LobbyPanel(conn, myHex, toast);
-    this.plotVotes = new PlotVotePanel(conn, myHex, toast);
+    this.plotVotes = new PlotVotePanel(conn, myHex, toast, onPreview);
     // On narrow screens the header collapses or expands the card.
     this.root
       .querySelector('.round-top')!
@@ -93,6 +97,11 @@ export class RoundHud {
         this.startButton.disabled = false;
       }
     });
+  }
+
+  /** The battle build the player is looking at while voting, if they picked one. */
+  get previewBoard(): number | null {
+    return this.plotVotes.preview;
   }
 
   /** Rebuilds the card from the client cache; call whenever round tables change. */
@@ -113,6 +122,7 @@ export class RoundHud {
         phase !== 'Lobby' && phase !== 'Voting',
       );
     }
+    if (phase !== this.lastPhase) this.plotVotes.preview = null;
     this.lastPhase = phase;
     this.root.dataset.phase = phase;
     this.phaseEl.textContent = `Round ${state.round} · ${PHASE_LABELS[phase] ?? phase}`;
@@ -128,7 +138,12 @@ export class RoundHud {
         'Build together on a co-op theme, battle on your own island, or suggest an idea.';
       this.lobby.render();
     } else if (battle) {
-      this.renderBattle(phase, state.themeTitle, state.host?.toHexString());
+      this.renderBattle(
+        phase,
+        state.themeTitle,
+        state.host?.toHexString(),
+        state.showcaseBoard,
+      );
     } else {
       this.renderCoop(state.challengeId, state.themeTitle);
     }
@@ -166,26 +181,35 @@ export class RoundHud {
     phase: string,
     theme: string,
     hostHex: string | undefined,
+    showcaseBoard: number,
   ): void {
-    const building = myPlot(this.conn, this.myHex) !== undefined;
     if (phase === 'Voting') {
       this.titleEl.textContent = 'Vote for the best build';
-      this.blurbEl.textContent = `Theme: ${theme}. Walk around, then pick a favourite (not your own).`;
+      this.blurbEl.textContent = `Theme: ${theme}. Tap a build to look at it, then vote (not your own).`;
       this.plotVotes.render();
+      return;
+    }
+    if (phase === 'Showcase') {
+      const boards = battleBoards(this.conn, this.myHex);
+      const builder = [...this.conn.db.plot.iter()].find(
+        (p) => boardOfPlot(p.plotIndex) === showcaseBoard,
+      );
+      this.titleEl.textContent = `${builder?.builderName ?? 'A'}'s build`;
+      this.blurbEl.textContent = `Theme: ${theme} · build ${boards.indexOf(showcaseBoard) + 1} of ${boards.length}`;
       return;
     }
     this.titleEl.textContent = `Build Battle: ${theme}`;
     if (phase !== 'Building') {
       this.blurbEl.textContent = 'The votes are in!';
-    } else if (building) {
+    } else if (myPlot(this.conn, this.myHex)) {
       this.blurbEl.textContent =
-        'Build your best version inside your plot. Everyone votes after!';
+        'Build your best version on your own private island. Everyone sees it in the showcase!';
     } else if (hostHex === this.myHex) {
       this.blurbEl.textContent =
-        'Your idea won! Watch the builders, then vote for the best one.';
+        'Your idea won! The builders are working in private; every build is shown at the end.';
     } else {
       this.blurbEl.textContent =
-        'You are spectating this one. Watch the builders, then vote.';
+        'You are watching this one. Every build is shown at the end, then you vote.';
     }
   }
 

@@ -8,6 +8,8 @@ export interface RoundTiming {
   scoringSeconds: number;
   votingSeconds: number;
   resultsSeconds: number;
+  /** How long each build is on show in a battle's showcase tour. */
+  showcaseSeconds: number;
 }
 
 export const DEFAULT_TIMING: RoundTiming = {
@@ -16,6 +18,7 @@ export const DEFAULT_TIMING: RoundTiming = {
   scoringSeconds: 4,
   votingSeconds: 25,
   resultsSeconds: 12,
+  showcaseSeconds: 8,
 };
 
 export const MAX_PHASE_SECONDS = 600;

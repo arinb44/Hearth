@@ -17,4 +17,5 @@ export default __t.row({
   scoringSeconds: __t.u32().name("scoring_seconds"),
   votingSeconds: __t.u32().name("voting_seconds"),
   resultsSeconds: __t.u32().name("results_seconds"),
+  showcaseSeconds: __t.u32().name("showcase_seconds"),
 });

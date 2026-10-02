@@ -11,7 +11,7 @@ import {
 import { tileKey } from './logic/grid';
 import { cellKey, SHARED_BOARD } from './logic/islands';
 import { layerOf } from './logic/pieces';
-import { requireGameState } from './rounds';
+import { battleBoard, requireGameState } from './rounds';
 import { spacetimedb, type Ctx } from './schema';
 
 // Only the owner sees their builds; nobody else downloads them.
@@ -28,7 +28,10 @@ function requireOwnBuild(ctx: Ctx, buildId: bigint) {
   return { account, build };
 }
 
-/** Saves the board of the island you are on (any island) to your account. */
+/**
+ * Saves the board you see on the island you are on (any island) to your account:
+ * your own build during a battle round, otherwise the island's shared board.
+ */
 export const saveBuild = spacetimedb.reducer(
   { name: t.string() },
   (ctx, { name }) => {
@@ -44,8 +47,12 @@ export const saveBuild = spacetimedb.reducer(
         'You can keep up to ' + MAX_SAVED_BUILDS + ' builds; delete one first',
       );
     }
+    const state = requireGameState(ctx, me.islandId);
+    const inBattle = state.mode.tag === 'Battle' && state.phase.tag !== 'Lobby';
+    const board =
+      (inBattle && battleBoard(ctx, me.islandId, ctx.sender)) || SHARED_BOARD;
     const pieces = [...ctx.db.piece.islandId.filter(me.islandId)]
-      .filter((p) => p.board === SHARED_BOARD)
+      .filter((p) => p.board === board)
       .sort((a, b) => a.tileKey - b.tileKey || a.layer - b.layer)
       .map(({ kind, tileX, tileZ, rotation }) => ({
         kind,
@@ -103,6 +110,7 @@ export const loadBuild = spacetimedb.reducer(
     }
     ctx.db.activity.insert({
       islandId: me.islandId,
+      board: SHARED_BOARD,
       kind: 'loaded',
       actorName: me.name,
       colorIndex: me.colorIndex,

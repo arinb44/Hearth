@@ -12,6 +12,7 @@ import {
 
 export default __t.row({
   islandId: __t.u64().name("island_id"),
+  board: __t.u8(),
   kind: __t.string(),
   actorName: __t.string().name("actor_name"),
   colorIndex: __t.u8().name("color_index"),

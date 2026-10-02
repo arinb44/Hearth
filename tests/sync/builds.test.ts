@@ -162,6 +162,7 @@ describe('saved builds', () => {
           t.scoringSeconds,
           t.votingSeconds,
           t.resultsSeconds,
+          t.showcaseSeconds,
         ].map(String),
       );
     setLobbySeconds(30);
