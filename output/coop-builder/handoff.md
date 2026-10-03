@@ -24,9 +24,10 @@ A low-poly 3D multiplayer building game on SpacetimeDB:
 - **Maincloud:** republished with `--delete-data=always` (approved), so the database is fresh. Main Island id 1; timing defaults `30 120 4 25 12 8`.
 - **Tests:** 134/134 (101 unit, 33 sync). The build and the type-checks are clean.
 - **Still open, needs the user:**
-  1. Open the live URL once to confirm it connects. The Browser pane wasn't allowed to open github.io.
-  2. Try a real phone in landscape. Only emulation has been checked.
-  3. Ideally, a session with about 10 real players.
+  1. Try a real phone in landscape. Only emulation has been checked.
+  2. Ideally, a session with about 10 real players.
+
+  The user confirmed on 2026-10-05 that the live site connects and works.
 - **Possibly uncommitted:** this handoff file (check `git status`).
 
 ## Rules (non-negotiable)

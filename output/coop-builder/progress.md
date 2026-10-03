@@ -1,7 +1,7 @@
 # Progress: coop-builder
 
 - **Current phase:** Phase 5 (summary written); Revision 6 complete
-- **Status:** Revision 6 shipped. M9a–M9d committed (`917bf28`, `d4cc0a3`, `8f1f9b9`, `5450fbd`) plus the docs commit; `coop-builder-mhacks` republished with `--delete-data=always` (approved; Main Island id 1, timing 30/120/4/25/12/8) and `main` pushed. Waiting on the user's live and real-device checks.
+- **Status:** Revision 6 shipped. M9a–M9d committed (`917bf28`, `d4cc0a3`, `8f1f9b9`, `5450fbd`) plus the docs commit; `coop-builder-mhacks` republished with `--delete-data=always` (approved; Main Island id 1, timing 30/120/4/25/12/8) and `main` pushed. The user confirmed the live site connects and works (2026-10-05); a real phone and a ~10-player session are still untested.
 
 ## Completed Milestones
 - 2026-10-04: **M9d complete, committed as `5450fbd`.** Escape menu: Esc (or ☰ Menu) toggles the menu over the game (in a text field Esc only leaves the field; on the main screen it does nothing). Top: Back to game, Exit to main menu (replaces the Leave island link). Tabs: Islands (each island's live status from every island's `game_state`, now in the global subscription), Friends (badge for requests waiting), Builds, Profile (stats, recovery code); the main screen uses the same tabs. Hint line and Menu tooltip mention Esc. Browser check on `coop-builder-r6`: Esc open/close, tabs, Exit, island status, and the compact 740×360 layout in game. Ship docs drafted: README (combos, private battles, stacking, walls, Esc menu, 6-argument `configure_timing`) and a rewritten `summary.md`. Tests 134/134.
@@ -46,7 +46,7 @@
 - Node is at `C:\Program Files\nodejs`. Prepend it to PATH in shells opened before the install.
 
 ## Next Step
-1. Revision 6 is shipped. Remaining: the user opens the live URL to confirm it connects, tries a real phone in landscape, and (ideally) a session with ~10 real players.
+1. Revision 6 is shipped, and the user confirmed the live site works (2026-10-05). Remaining: a real phone in landscape, and (ideally) a session with ~10 real players.
 2. (Done) M9a (stacking layer + Stone Wall). Revision 6 (user requests on 2026-10-04, after M8c): fireflies stack on non-building pieces; stone walls that connect to towers; no objectives in co-op (free build on a theme) and nothing stops building until time is up; score = total pieces with adjacency multipliers (e.g. bridge next to water, lamp next to tile or path); co-op together, Build Battle on a private island; Escape opens the menu (exit to main menu, islands, friends). Get answers to the open design questions, write Revision 6 into `plan.md`, get approval, then build.
 3. Ask the user to open the live URL to confirm it connects, and to try a real phone in landscape.
 4. The local dev DB `coop-builder` still has the M8b schema; ask before wiping it (or keep using `coop-builder-m8c`).
@@ -60,4 +60,4 @@ Commit M5 after approval; push (redeploys Pages); ask the user to try the live U
 ## Open Questions
 - None right now.
 
-**Last updated:** 2026-10-04
+**Last updated:** 2026-10-05
