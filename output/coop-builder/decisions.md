@@ -68,3 +68,8 @@
 | 2026-10-04 | — | Commit M9d and the ship docs | Commit / not yet | Commit both |
 | 2026-10-04 | — | Ship Revision 6 | Publish and push / push nothing yet | Maincloud republished with `--delete-data=always` (approved; live data wiped), then push `main` |
 | 2026-10-04 | — | Refreshed handoff after Revision 6 | Commit and push / keep local | Commit and push |
+| 2026-10-05 | — | Revision 7: how to tie login to an email | SpacetimeAuth magic link / email stored unverified / own email codes via an email API | SpacetimeAuth magic link (recommendation): the same email gives the same identity on every device; recovery codes go away; the user creates the SpacetimeAuth project and shares the client ID |
+| 2026-10-05 | — | Revision 7: hold to place | Drag places + right-drag removes / left-drag only / also on touch | Mouse: hold left and sweep to place, hold right and sweep to remove; touch unchanged (recommendation) |
+| 2026-10-05 | — | Plan Revision 7 | Approve / only hold to place | Approve |
+| 2026-10-05 | — | Dependency `oidc-client-ts` | Install / hand-roll PKCE | Install (recommendation) |
+| 2026-10-05 | — | Commit and push M10a | Commit and push / commit only / not yet | Commit and push (no schema change, so no Maincloud publish) |

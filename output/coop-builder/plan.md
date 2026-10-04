@@ -351,3 +351,63 @@ I'll ask about these with options and a recommendation. D1, D2, D5, D6 and D7 sh
 - **Scope:** M9c is the largest milestone. If time runs short, the fallback is to hide other plots on today's 8×8 plots (about 45 min).
 
 **Status:** Revision 6 approved on 2026-10-04.
+
+---
+
+## Revision 7 (2026-10-05): Hold to place, email sign-in
+
+**Request:** hold down the mouse to keep placing (it saves time), and tie the login to an email address.
+**Choices made:** SpacetimeAuth magic-link email (SpacetimeDB's own sign-in service); mouse drag places, right-drag removes; touch unchanged.
+
+### Requirements
+30. **Hold to place (mouse).**
+    - Holding the left button and sweeping places the selected piece on every tile the pointer passes over, including the first one. Tiles in between are filled even when the mouse moves fast.
+    - During a drag, tiles where the piece can't go (taken, out of reach, a building under fireflies) are skipped quietly. A drag never rotates; a plain click on a piece still does.
+    - Holding the right button and sweeping removes the top piece of each tile passed over.
+    - Touch stays as it is: taps only.
+    - The server still checks every placement.
+31. **Email sign-in.**
+    - The main screen offers **Sign in with email**: SpacetimeAuth sends a magic link, and opening it returns the player to the game, signed in.
+    - The same email is the same player on every device. Recovery codes are removed.
+    - **First sign-in:** pick a username. The module only creates an account for a verified SpacetimeAuth token for this game (the issuer and client ID are checked) that carries an email. The email is kept private: other players never see it, and the Profile tab shows it only to its owner.
+    - **Sign out:** returns to the main screen with a fresh, signed-out connection.
+    - When the sign-in token expires, the game renews it silently; if that fails, it asks the player to sign in again.
+
+### Technical approach
+- **Client:**
+  - `oidc-client-ts` with authorization code + PKCE (the library behind SpacetimeAuth's React guide). Authority `https://auth.spacetimedb.com/oidc`, scopes `openid profile email`.
+  - The redirect URI is the game page itself (GitHub Pages can't serve a `/callback` route).
+  - The ID token goes to `DbConnection.withToken(...)`.
+- **Module:**
+  - A pure `verifiedEmail(claims, clientId)` in `logic/accounts.ts` checks the issuer, the audience, and the `email` / `email_verified` claims.
+  - `create_account(username)` reads `ctx.senderAuth.jwt`.
+  - A private `account_email` table holds the email.
+  - `recover_account`, `new_recovery_code`, `account_secret` and the `my_recovery_code` view are deleted.
+- **Tests and local development:** magic links can't run inside automated tests. An admin-only `config.require_email` flag is on by default; the sync tests' setup turns it off on the throwaway test database. The claim checks are unit-tested.
+- **Pointer:** a drag tracks the tiles between pointer events with a grid line walk (Bresenham), so a fast sweep leaves no gaps. Each newly entered tile gets one reducer call, and failures during a drag show no toast.
+- **Breaking schema change:** another Maincloud publish with `--delete-data`, so live accounts are deleted (asked for at ship time).
+
+### What the user does (the agent can't sign into the dashboard)
+1. In the SpacetimeDB dashboard, open **SpacetimeAuth** and create a project (e.g. "Coop Builder").
+2. In its default client, add the redirect URIs `https://arinb44.github.io/SpacetimeDemoMHacks/`, `http://localhost:5173/` and `http://localhost:5174/`, with the same three as post-logout URIs.
+3. Make sure **magic link** login is enabled.
+4. Send the agent the **client ID**. It is public and safe to share; never share the client secret.
+
+### Dependencies
+- `oidc-client-ts` (MIT, npm): the OpenID Connect login flow in the browser. Needs approval before installing.
+
+### Milestones
+| # | Milestone | Ends with | Est. |
+|---|---|---|---|
+| **M10a** | Hold to place and right-drag remove | Unit tests for the tile walk; browser check | 45 min |
+| **M10b** | Email sign-in: SpacetimeAuth flow, token connection, module checks, private email, recovery codes removed, test flag | Unit + sync tests; a local sign-in check by the user (the magic link goes to their inbox) | 2 h |
+| **Ship** | Maincloud publish (`--delete-data`), push, README | Live sign-in check | 20 min |
+
+### Risks
+- **SpacetimeAuth is beta;** features and limits may change.
+- **Signing in needs a real inbox.** The agent can't receive the magic link, so the end-to-end sign-in check needs the user.
+- **Token renewal:** if silent renewal isn't available for this client, players are asked to sign in again when their token expires (after a disconnect).
+- **Another live wipe:** accounts made on the live site are lost once more.
+- **Local development** then also needs SpacetimeAuth (localhost redirect URIs), except for the tests' throwaway database.
+
+**Status:** Revision 7 approved on 2026-10-05 (with the `oidc-client-ts` dependency).

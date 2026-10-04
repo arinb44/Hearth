@@ -1,5 +1,9 @@
 import * as THREE from 'three';
-import { tileToWorld, type Tile } from '../../spacetimedb/src/logic/grid';
+import {
+  tileLine,
+  tileToWorld,
+  type Tile,
+} from '../../spacetimedb/src/logic/grid';
 import { SHARED_BOARD } from '../../spacetimedb/src/logic/islands';
 import type { Vec2 } from '../../spacetimedb/src/logic/movement';
 import {
@@ -46,6 +50,8 @@ export class Builder {
   private canBuildShown = true;
   private readonly hint = document.getElementById('hint')!;
   private ghost: THREE.Group | null = null;
+  /** The last tile handled while a mouse button is held, so a drag acts once per tile. */
+  private dragFrom: Tile | null = null;
   private readonly ghostMaterial = new THREE.MeshBasicMaterial({
     transparent: true,
     opacity: 0.5,
@@ -141,6 +147,7 @@ export class Builder {
     }
     const pos = this.playerPos();
     const tile = this.pointer.tile();
+    this.continueDrag(tile, pos);
     this.reachRing.visible = pos !== null;
     if (pos) this.reachRing.position.set(pos.x, 0.02, pos.z);
 
@@ -245,10 +252,43 @@ export class Builder {
   }
 
   /**
+   * Hold and sweep with the mouse: each tile the pointer reaches (and every tile in
+   * between) gets the selected piece, or loses its top piece with the right button.
+   * Runs every frame, so it also follows the camera while the player walks. Tiles
+   * where that can't happen are skipped quietly, and a drag never rotates.
+   */
+  private continueDrag(tile: Tile | null, pos: Vec2 | null): void {
+    const held = this.pointer.held();
+    if (!held || !tile || !pos || !this.dragFrom) {
+      if (!held) this.dragFrom = null;
+      return;
+    }
+    if (tile.x === this.dragFrom.x && tile.z === this.dragFrom.z) return;
+    const removing = held === 'secondary' || this.removeMode;
+    for (const t of tileLine(this.dragFrom, tile)) {
+      const contents = this.contents(t);
+      const call = removing
+        ? this.checkModify(t, pos, contents) === null &&
+          this.conn.reducers.removePiece({ tileX: t.x, tileZ: t.z })
+        : this.checkPlace(t, pos, contents) === null &&
+          this.conn.reducers.placePiece({
+            kind: this.selected,
+            tileX: t.x,
+            tileZ: t.z,
+            rotation: this.rotation,
+          });
+      // A tile someone else just took is fine to skip mid-drag.
+      if (call) call.catch(() => {});
+    }
+    this.dragFrom = tile;
+  }
+
+  /**
    * Click or tap: place the selected piece where it fits, otherwise rotate the piece
    * already there (or remove, in remove mode).
    */
   private primary(tile: Tile): void {
+    this.dragFrom = tile;
     if (this.removeMode) return this.remove(tile);
     const pos = this.playerPos();
     if (!this.enabled || !pos) return;
@@ -270,6 +310,7 @@ export class Builder {
   }
 
   private remove(tile: Tile): void {
+    this.dragFrom = tile;
     const pos = this.playerPos();
     if (!this.enabled || !pos) return;
     const error = this.checkModify(tile, pos, this.contents(tile));

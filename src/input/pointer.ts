@@ -11,6 +11,9 @@ export interface PointerHandlers {
   onSecondary(tile: Tile): void;
 }
 
+/** Which mouse button is held down: left places, right removes. */
+export type HeldButton = 'primary' | 'secondary' | null;
+
 /**
  * Tracks the pointer over the canvas and maps it to the ground tile beneath it.
  * The tile is recomputed on demand because the follow camera keeps moving.
@@ -21,14 +24,23 @@ export class PointerInput {
   private readonly hit = new THREE.Vector3();
   private inside = false;
   private touchStart: { x: number; y: number; time: number } | null = null;
+  private heldButton: HeldButton = null;
 
   constructor(
     private readonly canvas: HTMLElement,
     private readonly camera: THREE.Camera,
     handlers: PointerHandlers,
   ) {
-    canvas.addEventListener('pointermove', (e) => this.track(e));
-    canvas.addEventListener('pointerleave', () => (this.inside = false));
+    canvas.addEventListener('pointermove', (e) => {
+      this.track(e);
+      // A release outside the window never reaches us; the buttons tell.
+      if (e.pointerType === 'mouse' && e.buttons === 0) this.heldButton = null;
+    });
+    canvas.addEventListener('pointerleave', () => {
+      this.inside = false;
+      this.heldButton = null;
+    });
+    window.addEventListener('blur', () => (this.heldButton = null));
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     canvas.addEventListener('pointerdown', (e) => {
       this.track(e);
@@ -36,6 +48,8 @@ export class PointerInput {
         this.touchStart = { x: e.clientX, y: e.clientY, time: e.timeStamp };
         return;
       }
+      this.heldButton =
+        e.button === 0 ? 'primary' : e.button === 2 ? 'secondary' : null;
       const tile = this.tile();
       if (!tile) return;
       if (e.button === 0) handlers.onPrimary(tile);
@@ -43,6 +57,7 @@ export class PointerInput {
     });
     // Touch acts on release, and only for a tap, so a stray drag never builds.
     canvas.addEventListener('pointerup', (e) => {
+      if (e.pointerType === 'mouse') this.heldButton = null;
       const start = this.touchStart;
       this.touchStart = null;
       if (e.pointerType === 'mouse' || !start) return;
@@ -52,6 +67,11 @@ export class PointerInput {
       const tile = this.tile();
       if (tile) handlers.onPrimary(tile);
     });
+  }
+
+  /** The mouse button held down since the last press on the canvas, if any. */
+  held(): HeldButton {
+    return this.heldButton;
   }
 
   /** The tile under the pointer, or null when the pointer is off the canvas. */

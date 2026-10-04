@@ -37,3 +37,28 @@ export function tileToWorld(index: number): number {
 export function worldToTile(coord: number): number {
   return Math.floor(coord / TILE_SIZE + GRID_SIZE / 2);
 }
+
+/**
+ * The tiles a drag passes from `from` (excluded) to `to` (included), one side step at a
+ * time, so a fast sweep leaves no gaps and a dragged path or wall stays connected.
+ */
+export function tileLine(from: Tile, to: Tile): Tile[] {
+  const nx = Math.abs(to.x - from.x);
+  const nz = Math.abs(to.z - from.z);
+  const sx = Math.sign(to.x - from.x);
+  const sz = Math.sign(to.z - from.z);
+  const out: Tile[] = [];
+  let { x, z } = from;
+  for (let ix = 0, iz = 0; ix < nx || iz < nz;) {
+    // Step along whichever axis is further behind its share of the line.
+    if ((0.5 + ix) / nx < (0.5 + iz) / nz) {
+      x += sx;
+      ix++;
+    } else {
+      z += sz;
+      iz++;
+    }
+    out.push({ x, z });
+  }
+  return out;
+}
