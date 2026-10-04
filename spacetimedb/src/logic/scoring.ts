@@ -67,6 +67,12 @@ export const COMBOS: Combo[] = [
     where: 'under',
     label: 'Fireflies over greenery',
   },
+  {
+    kind: 'campfire',
+    partners: ['bench'],
+    where: 'beside',
+    label: 'Campfire by a bench',
+  },
 ];
 
 /** Points for one, two, and three stars. */

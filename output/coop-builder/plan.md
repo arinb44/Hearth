@@ -411,3 +411,10 @@ I'll ask about these with options and a recommendation. D1, D2, D5, D6 and D7 sh
 - **Local development** then also needs SpacetimeAuth (localhost redirect URIs), except for the tests' throwaway database.
 
 **Status:** Revision 7 approved on 2026-10-05 (with the `oidc-client-ts` dependency).
+
+### Revision 7 addendum (2026-10-05): Campfire
+**Request:** add a campfire to Environment. **Choices made:** the Kenney Nature Kit stone campfire (re-downloaded, approved; only `campfire_stones.glb`, 17 KB, copied), with an animated low-poly flame and a warm glow that grows at night; a new combo, **Campfire by a bench** (×2).
+- **Requirement 32.** A Campfire piece in the Environment section (no hotkey; existing hotkeys unchanged). It is not a building, so fireflies may float over it.
+- **Milestone M10c** (about 30 min): shared catalog, combo, model, flame and glow, code-drawn fallback; tests; browser check. Shipping it only needs a Maincloud republish **without** a wipe (piece kinds are strings), then a push.
+
+**Status:** M10c approved by the user's request and choices on 2026-10-05.

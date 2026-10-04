@@ -6,7 +6,7 @@ import {
   isConnective,
   type ConnectiveKind,
 } from './connectedModels';
-import { createFireflies, createLampGlow } from './glow';
+import { createCampfireFlame, createFireflies, createLampGlow } from './glow';
 import type { ModelLibrary } from './modelLibrary';
 
 // Procedural low-poly models, one per piece kind, each fitting a 1×1 tile with its
@@ -29,6 +29,7 @@ const M = {
   towerRoof: mat('#4a6fa5'),
   dark: mat('#33363d'),
   glow: mat('#ffe28a', { emissive: '#ffcf4a', emissiveIntensity: 0.9 }),
+  log: mat('#7a4a2b'),
   petals: ['#ff6b9d', '#ffd43b', '#b197fc', '#ff922b', '#ffffff'].map((c) =>
     mat(c),
   ),
@@ -143,6 +144,24 @@ const builders: Record<
     ].map(([x, z]) =>
       mesh(new THREE.ConeGeometry(0.1, 0.26, 4), M.leaf, x, 0.13, z),
     ),
+  campfire: () => {
+    const stone = new THREE.DodecahedronGeometry(0.08);
+    const ring = Array.from({ length: 7 }, (_, i) => {
+      const a = (i / 7) * Math.PI * 2;
+      return mesh(stone, M.stone, Math.cos(a) * 0.24, 0.05, Math.sin(a) * 0.24);
+    });
+    const logs = [Math.PI / 4, -Math.PI / 4].map((turn) => {
+      const log = mesh(
+        new THREE.CylinderGeometry(0.035, 0.035, 0.36, 6),
+        M.log,
+        0,
+        0.05,
+      );
+      log.rotation.set(Math.PI / 2, 0, turn);
+      return log;
+    });
+    return [...ring, ...logs];
+  },
   bench: () => [
     mesh(new THREE.BoxGeometry(0.75, 0.05, 0.24), M.wood, 0, 0.2),
     mesh(new THREE.BoxGeometry(0.75, 0.18, 0.04), M.wood, 0, 0.33, -0.11),
@@ -184,7 +203,14 @@ export function createPieceModel(kind: PieceKind): THREE.Group {
     });
     prototypes.set(kind, proto);
   }
-  return proto.clone();
+  const model = proto.clone();
+  if (kind === 'campfire') {
+    // Its flames animate, and clones drop functions, so each fire gets its own.
+    const flame = createCampfireFlame(0.06);
+    model.add(flame);
+    model.userData.animate = flame.userData.animate;
+  }
+  return model;
 }
 
 /** A translucent copy of a model for the placement preview. */
@@ -199,6 +225,7 @@ export function createGhostModel(
       o.castShadow = false;
       o.receiveShadow = false;
     }
+    if (o instanceof THREE.Sprite) o.visible = false;
   });
   return ghost;
 }

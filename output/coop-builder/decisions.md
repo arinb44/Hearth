@@ -73,3 +73,6 @@
 | 2026-10-05 | — | Plan Revision 7 | Approve / only hold to place | Approve |
 | 2026-10-05 | — | Dependency `oidc-client-ts` | Install / hand-roll PKCE | Install (recommendation) |
 | 2026-10-05 | — | Commit and push M10a | Commit and push / commit only / not yet | Commit and push (no schema change, so no Maincloud publish) |
+| 2026-10-05 | — | Campfire model | Kenney campfire / built in code | Kenney Nature Kit `campfire_stones.glb` (kit re-downloaded with approval, 10.5 MB, into the scratchpad; one 17 KB model copied) plus an animated flame and night glow (recommendation) |
+| 2026-10-05 | — | Campfire combo | By a bench / by a tree or pine / none | **Campfire by a bench** ×2 (recommendation) |
+| 2026-10-05 | — | Ship the campfire | Commit, publish (no wipe), push / commit only | Commit, republish Maincloud without a wipe, push |

@@ -22,6 +22,7 @@ export const PIECE_KINDS = [
   'fireflies',
   'bench',
   'wall',
+  'campfire',
 ] as const;
 export type PieceKind = (typeof PIECE_KINDS)[number];
 
@@ -43,6 +44,7 @@ export const PIECE_LABELS: Record<PieceKind, string> = {
   fireflies: 'Fireflies',
   bench: 'Bench',
   wall: 'Stone Wall',
+  campfire: 'Campfire',
 };
 
 /** Buildings fill their tile: nothing stacks on them. */
@@ -55,7 +57,7 @@ export const PIECE_CATEGORIES: { name: string; kinds: PieceKind[] }[] = [
   { name: 'Furniture', kinds: ['fence', 'lamp', 'bench'] },
   {
     name: 'Environment',
-    kinds: ['path', 'tile', 'water', 'rock', 'fireflies'],
+    kinds: ['path', 'tile', 'water', 'rock', 'fireflies', 'campfire'],
   },
 ];
 

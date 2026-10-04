@@ -11,7 +11,7 @@ island. Each round is chosen by a live lobby vote:
 - **Co-op round**: everyone builds together on the island on a theme ("Cozy
   Village", "Castle Lookout"…). There is no checklist: every piece scores a point,
   and good pairings score double (a lamp by a path, a bridge by water, fireflies over
-  a tree…). The server scores the board when time is up; 25, 50, and 100 points earn
+  a tree, a campfire by a bench…). The server scores the board when time is up; 25, 50, and 100 points earn
   one to three stars.
 - **Build Battle**: a popular theme or a player-submitted idea. Every builder gets a
   private board the size of the island and works unseen. When time is up, every
@@ -175,6 +175,6 @@ returns to an empty lobby (see _Admin controls_).
 - 3D models: [Kenney](https://www.kenney.nl) — Nature Kit 2.1 and Fantasy Town Kit 2.0,
   CC0 (public domain). The license files are in `public/assets/models/*/License.txt`.
   Houses and towers are assembled in code from the kit's wall and roof pieces;
-  bridges, lily pads, grass tufts, and the bench are kit models too.
+  bridges, lily pads, grass tufts, the bench, and the campfire are kit models too.
 - Everything else (avatars, sky, water, effects) is generated in code with Three.js.
 - If the models can't load, the game falls back to built-in procedural models.

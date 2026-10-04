@@ -28,6 +28,7 @@ const FILES = {
   grassLarge: 'nature/grass_large.glb',
   grassSmall: 'nature/grass.glb',
   bench: 'town/stall-bench.glb',
+  campfire: 'nature/campfire_stones.glb',
 } as const;
 
 type Parts = Record<keyof typeof FILES, THREE.Object3D>;
@@ -155,6 +156,8 @@ const ASSEMBLE: Partial<Record<PieceKind, (p: Parts) => THREE.Group>> = {
     return tufts;
   },
   bench: (p) => fit(p.bench.clone(), 0.85),
+  // Its flames are added per piece (see pieceModels.ts), since they animate.
+  campfire: (p) => fit(p.campfire.clone(), 0.75),
 };
 
 export interface ModelLibrary {
