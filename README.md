@@ -1,4 +1,4 @@
-# SpacetimeDemoMHacks: Coop Builder
+# Hearth: Coop Builder
 
 A low-poly 3D multiplayer building game, built for the MHacks "Best use of
 Spacetime" track. Players make an account (a username plus a recovery code), then
